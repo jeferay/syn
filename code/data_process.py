@@ -168,25 +168,18 @@ def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
                 
     return datasets_folds
 
-            
 
 
+#set up seed         
+def setup_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)        
 
 
 
 if __name__ == '__main__':
     setup_seed(0)
-    concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph()
-    datasets_folds =  data_split(concept_list=concept_list,synonym_pairs=synonym_pairs,is_unseen=True,test_size=0.33)
-
-    mentions_train,concepts_train,mentions_test,concepts_test = datasets_folds[0]
-
-    classifier = EditDistance_Classifier(concept_list)
-    classifier.forward(mentions_test[3])
-    print(mentions_test[3])
-    print(concepts_test[3])
-    
-
+    get_all_data()
 
     #synonym_pairs,negative_pairs = construct_positive_and_negative_pairs(concept_list,synonym_pairs)
     #print(len(negative_pairs),len(synonym_pairs))
