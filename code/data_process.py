@@ -158,8 +158,6 @@ def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
                 left_concepts.remove(concept)
 
             datasets_folds.append((mentions_train,concepts_train,mentions_test,concepts_test))
-            #print(len(mentions_test))
-            #print(len(concepts_test))
 
             #check overlap
             #for concept in concepts_test:
