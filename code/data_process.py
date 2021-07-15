@@ -9,13 +9,9 @@ import sklearn
 from sklearn.model_selection import train_test_split
 import numpy as np
 
-
-
-    
-    
-
 #catch all suitable datasets on the website
 def get_all_data(filename='../data/ontologies.jsonld'):
+    specific_problem_ids=['rs','fix','eo','envo']# for some unkonwn reasons, rs.obo, fix.obo and eo.obo can not be downloaded;and envo has a strange problem
     urls = []
     ids = []
     with open(filename,mode='r',encoding='utf-8') as f:
@@ -27,7 +23,7 @@ def get_all_data(filename='../data/ontologies.jsonld'):
                 products = entry['products']
                 
                 for product in products:
-                    if product['id']==id + '.obo' and id!='rs' and id!='fix' and id!='eo':# for some unkonwn reasons, rs.obo, fix.obo and eo.obo can not be downloaded
+                    if product['id']==id + '.obo' and id not in specific_problem_ids:
                         urls.append(product['ontology_purl'])
                         ids.append(id)
     
@@ -39,8 +35,7 @@ def get_all_data(filename='../data/ontologies.jsonld'):
         filename = id+'.obo'
         file = wget.download(url=url,out= os.path.join(data_dir,filename))
     
-    
-#generate relative concepts ,construct a scipy csr matrix of edges to present the graph and collect synonym pairs
+#generate relative concepts ,construct a scipy csr matrix of edges to present the graph and collect synonym pairs for one file
 def construct_graph(filename='../data/datasets/cl.obo'):
     """
     returns:
@@ -74,21 +69,29 @@ def construct_graph(filename='../data/datasets/cl.obo'):
         
         #construct a scipy csr matrix of edges and collect synonym pairs
         check_new_term = False
+        check_new_name = False#remember that not every term has a name and we just take the terms with name count. Good news: names' locations are relatively above
         node = ""
         iter_concept = iter(concept_list)
         for i,line in enumerate(lines):
             if line[:6]=='[Term]':#starts with a [Term] and ends with an '\n'
                 check_new_term = True
-                node = next(iter_concept)
+                continue
+            if line[:5]=='name:':
+                check_new_name = True
+                if check_new_term == True:
+                    node = next(iter_concept)
                 continue
             if line[:1]=='\n':
                 check_new_term = False
+                check_new_name = False
                 continue
-            if check_new_term == True:
+            if check_new_term == True and check_new_name == True:
                 if line[:5]=='is_a:':
                     entry = line.split(" ")
-                    father_node = " ".join(entry[entry.index('!') + 1:])[:-1]
-                    edges.append((concept2id[father_node],concept2id[node]))
+                    if '!' in entry:# some father_nodes are not divided by '!' and we abandon them
+                        father_node = " ".join(entry[entry.index('!') + 1:])[:-1]
+                        if father_node in concept_list:#some father_nodes are not in concepts_list, and we abandon them.
+                            edges.append((concept2id[father_node],concept2id[node]))
                     #print("--node--",node,'---father_node---',father_node)
                 if line[:8]=='synonym:':
                     start_pos = line.index("\"") + 1
@@ -114,6 +117,7 @@ def construct_positive_and_negative_pairs(concept_list,synonym_pairs,neg_posi_ra
             negative_pairs.append((mention,concept))
     return synonym_pairs,negative_pairs
 
+#split data for one file that corresponds to the synonym_pairs
 def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
     """
     args:
@@ -167,7 +171,6 @@ def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
     return datasets_folds
 
 
-
 #set up seed         
 def setup_seed(seed):
     random.seed(seed)
@@ -177,8 +180,5 @@ def setup_seed(seed):
 
 if __name__ == '__main__':
     setup_seed(0)
-    get_all_data()
-
-    #synonym_pairs,negative_pairs = construct_positive_and_negative_pairs(concept_list,synonym_pairs)
-    #print(len(negative_pairs),len(synonym_pairs))
-    #print(negative_pairs[0],synonym_pairs[0])
+    concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph('../data/datasets/cl.obo')
+    datasets_folds =  data_split(concept_list=concept_list,synonym_pairs=synonym_pairs,is_unseen=True,test_size=0.33)
