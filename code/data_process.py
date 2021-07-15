@@ -5,6 +5,15 @@ import os
 import scipy
 import  tqdm
 import random
+import sklearn
+from sklearn.model_selection import train_test_split
+import numpy as np
+
+
+
+    
+    
+
 #catch all suitable datasets on the website
 def get_all_data(filename='../data/ontologies.jsonld'):
     urls = []
@@ -87,32 +96,98 @@ def construct_graph(filename='../data/datasets/cl.obo'):
                     mention = line[start_pos:end_pos]
                     mention_set.add(mention)
                     synonym_pairs.append((mention,node))
-                    #print("--node--",node,'---synonym---',synonym)
+                    #print("--node--",node,'---synonym---',mention)
         
         return concept_list,concept2id,edges,list(mention_set),synonym_pairs
 
-#generate negative samples whose number is equal to the number of positive ones
-def construct_positive_and_negative_pairs(concept_list,synonym_pairs):
+#generate negative samples if needed
+def construct_positive_and_negative_pairs(concept_list,synonym_pairs,neg_posi_rate):
     """
-    returns: positive pairs and negative pairs
+    returns: positive pairs and negative pairs.And the number of negative samples is neg_posi_rate more than synonym pairs(positive samples)
     """
     negative_pairs = []
-    random.seed(0)
     for i,(mention,_) in enumerate(synonym_pairs):
-        concept = random.sample(concept_list,1)[0]
-        while (mention,concept) in synonym_pairs:
+        for _ in range(neg_posi_rate):
             concept = random.sample(concept_list,1)[0]
-        negative_pairs.append((mention,concept))
+            while (mention,concept) in synonym_pairs or (mention,concept) in negative_pairs:#avoid overlapping
+                concept = random.sample(concept_list,1)[0]
+            negative_pairs.append((mention,concept))
     return synonym_pairs,negative_pairs
 
-         
+def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
+    """
+    args:
+    is_unseen:if is_unseen==true, then the concepts in training pairs and testing pairs will not overlap 
+    returns:
+    three folds of train,test datasets
+    """
+    datasets_folds=[]
+    #notice that we collect the (mention,concept) pairs in a order of all the concepts, so the same concepts will assemble together
+    #as a result, we could remove all the (mention,concept) pairs with the same concept in an easy manner 
+    mentions = [mention for (mention,concept) in synonym_pairs] 
+    concepts = [concept for (mention,concept) in synonym_pairs]
+    
+    
+    #random split
+    if is_unseen == False:
+        for _ in range(3):
+            mentions_train,mentions_test,concepts_train,concepts_test = train_test_split(
+                mentions,concepts,test_size=test_size)#have already set up seed 
+            
+            #print(mentions_train[:3],concepts_train[:3],mentions_test[:3],concepts_test[:3])
+            datasets_folds.append((mentions_train,concepts_train,mentions_test,concepts_test))
+    
+    #random split, and the concepts in train set and test set will not overlap
+    else:
+        for seed in range(3):
+            mentions_train,mentions_test,concepts_train,concepts_test=mentions.copy(),[],concepts.copy(),[]
+            
+            left_concepts = sorted(list(set(concepts)))
+            while len(mentions_test) < len(mentions) * test_size:
+                concept = random.sample(left_concepts,1)[0]
+                
+                start_index,end_index = concepts.index(concept), len(concepts)-1 -  list(reversed(concepts)).index(concept)#the start index and the end index of the same concept
+
+                for K in range(start_index,end_index+1):
+                    mentions_test.append(mentions[K])
+                    mentions_train.remove(mentions[K])
+                    concepts_test.append(concept)
+                    concepts_train.remove(concept)
+                
+                
+                left_concepts.remove(concept)
+
+            datasets_folds.append((mentions_train,concepts_train,mentions_test,concepts_test))
+            #print(len(mentions_test))
+            #print(len(concepts_test))
+
+            #check overlap
+            #for concept in concepts_test:
+            #    if concept in concepts_train:
+            #        print(concept)
+                
+    return datasets_folds
+
+            
+
+
+
+
 
 if __name__ == '__main__':
+    setup_seed(0)
     concept_list,concept2id,edges,mention_list,synonym_pairs = construct_graph()
-    print(edges[0])
-    a,b = edges[0]
-    print(concept_list[a],concept_list[b])
-    print(len(concept_list))
-    synonym_pairs,negative_pairs = construct_positive_and_negative_pairs(concept_list,synonym_pairs)
-    print(len(negative_pairs),len(synonym_pairs))
-    print(negative_pairs[0],synonym_pairs[0])
+    datasets_folds =  data_split(concept_list=concept_list,synonym_pairs=synonym_pairs,is_unseen=True,test_size=0.33)
+
+    mentions_train,concepts_train,mentions_test,concepts_test = datasets_folds[0]
+
+    classifier = EditDistance_Classifier(concept_list)
+    classifier.forward(mentions_test[3])
+    print(mentions_test[3])
+    print(concepts_test[3])
+    
+
+
+    #synonym_pairs,negative_pairs = construct_positive_and_negative_pairs(concept_list,synonym_pairs)
+    #print(len(negative_pairs),len(synonym_pairs))
+    #print(negative_pairs[0],synonym_pairs[0])
