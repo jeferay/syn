@@ -97,6 +97,7 @@ def construct_graph(filename='../data/datasets/cl.obo'):
                     start_pos = line.index("\"") + 1
                     end_pos = line[start_pos:].index("\"") + start_pos
                     mention = line[start_pos:end_pos]
+                    if mention==node:continue#filter these mentions that are literally equal to the node's name
                     mention_set.add(mention)
                     synonym_pairs.append((mention,node))
                     #print("--node--",node,'---synonym---',mention)
@@ -117,7 +118,7 @@ def construct_positive_and_negative_pairs(concept_list,synonym_pairs,neg_posi_ra
             negative_pairs.append((mention,concept))
     return synonym_pairs,negative_pairs
 
-#split data for one file that corresponds to the synonym_pairs
+#split training and test data for one file that corresponds to the synonym_pairs
 def data_split(concept_list,synonym_pairs,is_unseen=True,test_size = 0.33):
     """
     args:
