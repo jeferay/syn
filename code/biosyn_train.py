@@ -119,7 +119,7 @@ def main(args):
         os.makedirs(args.output_dir)
         
     # load dictionary and queries
-    mydataset = MyDataset(os.path.join(args.filedir,args.filename))
+    mydataset = MyDataset(os.path.join(args.filedir,args.filename),migration_rate=args.migration_rate)
     train_dictionary = mydataset.load_dict_data()
     train_queries = mydataset.load_query_data(mode = 'train')
         
