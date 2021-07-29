@@ -1,6 +1,4 @@
-"""
-implement the data process and constrcution of datasets here
-"""
+
 import json
 from transformers.models import bert
 import wget
@@ -227,12 +225,13 @@ def load_data(filename='../data/datasets/cl.obo', use_text_preprocesser = False)
         
         query_id_array = sorted(query_id_array,key = lambda x:x[1])
         
-        #print(len(mention2id.items()))
-        #print(len(name_array))
-        #print(len(list(set(edges))))
+        print('mention num',len(mention2id.items()))
+        print('names num',len(name_array))
+        print('query num',len(query_id_array))
+        print('edge num', len(list(set(edges))))
         
         values=[1]*(2*len(edges))
-        rows = [i for (i,j) in edges] + [j for (i,j) in edges]
+        rows = [i for (i,j) in edges] + [j for (i,j) in edges]# construct undirected graph
         cols = [j for (i,j) in edges] + [i for (i,j) in edges]
         graph = sparse.coo_matrix((values,(rows,cols)), shape = (len(name_array),len(name_array)))
         n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
@@ -314,7 +313,7 @@ class Mention_Dataset(Dataset):
 
 
 class Biosyn_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_score_matrix,bert_score_matrix,bert_ratio,tokenizer):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder,bert_encoder,names_sparse_embedding,names_bert_embedding,bert_ratio,tokenizer,device):
         """
         args:
             name_arrayy: all the name of nodes in a sorted order; str of list
@@ -330,19 +329,25 @@ class Biosyn_Dataset(Dataset):
         self.query_array = query_array
         self.mention2id = mention2id
         self.top_k = top_k
-        self.sparse_score_matrix = sparse_score_matrix.to('cpu')
-        self.bert_score_matrix = bert_score_matrix.to('cpu')# tensor of shape(num_query, num_names)
+
+        self.sparse_encoder = sparse_encoder
+        self.bert_encoder = bert_encoder# still on the device
+        self.names_sparse_embedding = names_sparse_embedding.to(device)
+        self.names_bert_embedding = names_bert_embedding.to(device)# tensor of shape(num_query, num_names)
+        
         self.bert_ratio = bert_ratio
         self.n_bert = int(self.top_k * self.bert_ratio)
         self.n_sparse = self.top_k - self.n_bert
         self.tokenizer = tokenizer
+        self.device = device
 
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
-    def get_candidates_indices(self,index):
-        candidates_indices = torch.LongTensor(size=(self.top_k,))
-        sparse_score = self.sparse_score_matrix[index]
+    def get_candidates_indices(self,query_sparse_embedding,query_bert_embedding):
+
+        candidates_indices = torch.LongTensor(size=(self.top_k,)).to(self.device)
+        sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()
         _,sparse_indices = torch.sort(sparse_score,descending=True)
-        bert_score = self.bert_score_matrix[index]
+        bert_score = (torch.matmul(torch.reshape(query_bert_embedding,shape=(1,-1)),self.names_bert_embedding.transpose(0,1))).squeeze()
         _,bert_indices = torch.sort(bert_score,descending=True)
 
         candidates_indices[:self.n_sparse] = sparse_indices[:self.n_sparse]
@@ -353,12 +358,8 @@ class Biosyn_Dataset(Dataset):
             candidates_indices[i] = bert_indices[j]
             j+=1
         #print(candidates_indices)
-        if len(torch.unique(candidates_indices))!=len(candidates_indices):
-            print(bert_indices[:self.top_k])
-            print(sparse_indices[:self.top_k])
-            print(candidates_indices)
-            # assert no overlap
-        return candidates_indices
+        assert(len(torch.unique(candidates_indices))==len(candidates_indices))# assert no overlap
+        return candidates_indices.to('cpu'),sparse_score.to('cpu')
     
     def __getitem__(self, index):
         """
@@ -367,11 +368,14 @@ class Biosyn_Dataset(Dataset):
         """
         query = self.query_array[index]
         query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
-        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']),torch.squeeze(query_tokens['attention_mask'])
+        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).to(self.device),torch.squeeze(query_tokens['attention_mask']).to(self.device)
+
+        query_bert_embedding = self.bert_encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device
+        query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).to(self.device)
         
-        candidates_indices = self.get_candidates_indices(index)
+        candidates_indices,sparse_score = self.get_candidates_indices(query_sparse_embedding,query_bert_embedding)
+        candidates_sparse_score = sparse_score[candidates_indices]
         candidates_names = self.name_array[candidates_indices]
-        candidates_sparse_score = self.sparse_score_matrix[index][candidates_indices]# tensor of shape(top_k,)
 
         candidates_names_ids, candidates_names_attention_mask=[],[]
         for name in candidates_names:

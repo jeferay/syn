@@ -1,6 +1,3 @@
-"""
-implement all the neural networks model here
-"""
 import torch
 import torch.nn as nn
 from transformers import *
@@ -14,7 +11,7 @@ class Biosyn_Model(nn.Module):
         state_dict = torch.load(os.path.join(model_path, "pytorch_model.bin"))
         self.bert_encoder.load_state_dict(state_dict,False)
         self.bert_encoder = self.bert_encoder.to(device)
-        self.sparse_weight = nn.Parameter(torch.empty(1).cuda())
+        self.sparse_weight = nn.Parameter(torch.empty(1).cuda(0))
         self.sparse_weight.data.fill_(initial_sparse_weight)
     
     def forward(self,query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score):
