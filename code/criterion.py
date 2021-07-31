@@ -1,6 +1,3 @@
-"""
-implement the loss function here
-"""
 import torch
 import torch.nn.functional as F
 def marginal_loss(score,labels):

@@ -233,11 +233,12 @@ def load_data(filename='../data/datasets/cl.obo', use_text_preprocesser = False)
         values=[1]*(2*len(edges))
         rows = [i for (i,j) in edges] + [j for (i,j) in edges]# construct undirected graph
         cols = [j for (i,j) in edges] + [i for (i,j) in edges]
+        edge_index = torch.LongTensor([rows,cols])# undirected graph edge index
         graph = sparse.coo_matrix((values,(rows,cols)), shape = (len(name_array),len(name_array)))
         n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
         #print(n_components)
 
-        return np.array(name_array),np.array(query_id_array),mention2id,graph
+        return np.array(name_array),np.array(query_id_array),mention2id,edge_index
 
 #split train,eval and test data for one file that corresponds to the queries
 def data_split(query_id_array,is_unseen=True,test_size = 0.33):
@@ -300,7 +301,7 @@ def construct_positive_and_negative_pairs(concept_list,synonym_pairs,neg_posi_ra
 
 class Mention_Dataset(Dataset):
     def __init__(self,mention_array,tokenizer):
-        super(Mention_Dataset).__init__()
+        super(Mention_Dataset,self).__init__()
         self.mention_array  = mention_array
         self.tokenizer = tokenizer
     def __getitem__(self, index):
@@ -324,7 +325,7 @@ class Biosyn_Dataset(Dataset):
             bert_score_matrix: tensor of shape(num_query, num_name)
 
         """
-        super(Biosyn_Dataset).__init__()
+        super(Biosyn_Dataset,self).__init__()
         self.name_array = name_array
         self.query_array = query_array
         self.mention2id = mention2id
@@ -395,6 +396,36 @@ class Biosyn_Dataset(Dataset):
 
     def __len__(self):
         return len(self.query_array)
+
+
+# do not need to iter with epoches
+class Graph_Dataset(Dataset):
+    def __init__(self,name_array,query_array,mention2id,tokenizer,sparse_encoder,names_sparse_embedding,device):
+        super(Graph_Dataset,self).__init__()
+        self.name_array = name_array
+        self.query_array = query_array
+        self.mention2id = mention2id
+        self.tokenizer = tokenizer
+        self.sparse_encoder = sparse_encoder
+        self.device = device
+        self.names_sparse_embedding = names_sparse_embedding.to(device)
+
+    def __getitem__(self, index):
+        query = self.query_array[index]
+        query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
+        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).to(self.device),torch.squeeze(query_tokens['attention_mask']).to(self.device)
+        query_index = torch.LongTensor([self.mention2id[query]])
+        #query_bert_embedding = self.bert_encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device, tensor of shape (1,hidden)
+        query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).to(self.device)# tensor of shape (1,hidden)
+        sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()# tensor of shape(hidden)
+        return query_index,query_ids,query_attention_mask,sparse_score# the returned sparse_score is still on the device; returns the index so we could get the label
+    
+    def __len__(self):
+        return len(self.query_array)
+
+        
+        
+        
 
 
 
