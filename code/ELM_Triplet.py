@@ -184,8 +184,6 @@ for epoch in range(epochs):
         loss_1 = criterion(x_outputs, y_outputs)
         loss_2 = criterion(y_outputs, z_outputs)
         loss = loss_2 - loss_1 + alpha
-        if loss < 0:
-            loss = torch.tensor(0.0, requires_grad=True)
         loss.backward()
         optimizer.step()
 
@@ -204,7 +202,7 @@ for i in test_set:
         x, y, z = j.resize_(1, 1, 200), mention.resize_(1, 1, 200), mention.resize(1, 1, 200)
         x_outputs, y_outputs, z_outputs = net(x, y, z)
         candidates.append([criterion(x_outputs, y_outputs).item(), 0])
-    candidates.sort(key=lambda x: x[0], reverse=True)
+    candidates.sort(key=lambda x: x[0], reverse=False)
     print('candidates', candidates)
     if len(candidates) != 0:
         if candidates[0][1] == 1:
