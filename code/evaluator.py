@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 def get_sorted_top_k(array, top_k=1, axis=-1, reverse=False):
     """

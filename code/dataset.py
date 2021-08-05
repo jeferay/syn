@@ -400,25 +400,19 @@ class Biosyn_Dataset(Dataset):
 
 # do not need to iter with epoches
 class Graph_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,tokenizer,sparse_encoder,names_sparse_embedding,device):
+    def __init__(self,query_array,mention2id,tokenizer,device):
         super(Graph_Dataset,self).__init__()
-        self.name_array = name_array
         self.query_array = query_array
         self.mention2id = mention2id
         self.tokenizer = tokenizer
-        self.sparse_encoder = sparse_encoder
         self.device = device
-        self.names_sparse_embedding = names_sparse_embedding.to(device)
 
     def __getitem__(self, index):
         query = self.query_array[index]
         query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
         query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).to(self.device),torch.squeeze(query_tokens['attention_mask']).to(self.device)
         query_index = torch.LongTensor([self.mention2id[query]])
-        #query_bert_embedding = self.bert_encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device, tensor of shape (1,hidden)
-        query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).to(self.device)# tensor of shape (1,hidden)
-        sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()# tensor of shape(hidden)
-        return query_index,query_ids,query_attention_mask,sparse_score# the returned sparse_score is still on the device; returns the index so we could get the label
+        return query_ids,query_attention_mask,query_index,query
     
     def __len__(self):
         return len(self.query_array)
