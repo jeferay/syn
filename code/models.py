@@ -43,7 +43,7 @@ class Biosyn_Model(nn.Module):
 class Graphsage_Model(torch.nn.Module):
     def __init__(self,feature_size,hidden_size,output_size,model_path,initial_sparse_weight,device):
         super(Graphsage_Model,self).__init__()
-        
+
         #load bert encoder
         config = BertConfig.from_json_file(os.path.join(model_path, "config.json"))
         self.bert_encoder = BertModel(config = config) # bert encoder
@@ -143,6 +143,34 @@ class Bert_Candidate_Generator(nn.Module):
         return score
 
 
+
+class SimpleEmbedding(nn.Module):
+    def __init__(self):
+        super(SimpleEmbedding, self).__init__()
+        self.layer = nn.Sequential(nn.Conv1d(1, 1, kernel_size=200+1-128), nn.PReLU(), nn.MaxPool1d(3, stride=1, padding=1))
+
+    def forward(self, x):
+        x = self.layer(x)
+        return x
+
+
+class TripletNet(nn.Module):
+    def __init__(self, embedding_net):
+        super(TripletNet, self).__init__()
+        self.embedding_net = embedding_net
+
+    def forward(self, x1, x2, x3):
+        output1 = self.embedding_net(x1)
+        output2 = self.embedding_net(x2)
+        output3 = self.embedding_net(x3)
+        return output1, output2, output3
+
+    def get_embedding(self, x):
+        return self.embedding_net(x)
+
+
+
+=======
         
 class Bert_Cross_Encoder(nn.Module):
     def __init__(self,model_path,device):
