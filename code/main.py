@@ -6,7 +6,7 @@ import torch
 import logging
 import argparse
 
-from classifier import  Biosyn_Classifier, Graphsage_Classifier,CrossEncoder_Classifier
+from classifier import  Biosyn_Classifier, Graphsage_Classifier,CrossEncoder_Classifier,Graph_Classifier
 
 
 
@@ -41,11 +41,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--filename',type=str,default='../data/datasets/cl.obo')
     parser.add_argument('--use_text_preprocesser',action='store_true',default=False)
-    parser.add_argument('--is_unseen',action='store_true',default=True)
-    parser.add_argument('--device',type=str,default='cuda:0')
+    parser.add_argument('--is_unseen',action='store_true',default=False)
     parser.add_argument('--stage_1_model_path',type=str,default='../exp/cl/checkpoint_9')
     parser.add_argument('--stage_1_exp_path',type=str,default='../exp/cl/stage_1')
-    parser.add_argument('--stage_2_model_path',type=str,default='../biobert')
+    parser.add_argument('--stage_2_model_path',type=str,default='../exp/cl/checkpoint_9')
     parser.add_argument('--stage_2_exp_path',type=str,default='../exp/cl/stage_2')
 
     parser.add_argument('--vocab_file',type=str,default='../biobert/vocab.txt')
@@ -53,14 +52,14 @@ if __name__ == '__main__':
     parser.add_argument('--bert_ratio',type=float,default=0.5)
     parser.add_argument('--stage_1_lr',type=float,default=1e-5)
     parser.add_argument('--stage_1_weight_decay',type=float,default=1e-5)
-    parser.add_argument('--stage_2_lr',type=float,default=1e-5)
-    parser.add_argument('--stage_2_weight_decay',type=float,default=5e-6)
+    parser.add_argument('--stage_2_lr',type=float,default=1e-2)
+    parser.add_argument('--stage_2_weight_decay',type=float,default=0)
 
     parser.add_argument('--epoch_num',type=int,default=50)
-    parser.add_argument('--top_k',type=int,default=20)
-    parser.add_argument('--batch_size',type=int,default=8)
+    parser.add_argument('--top_k',type=int,default=3)
+    parser.add_argument('--eval_k',type=int,default=3)
+    parser.add_argument('--batch_size',type=int,default=64)
     parser.add_argument('--score_mode',type=str,default='hybrid')
-    parser.add_argument('--eval_k',type=int,default=20)
     parser.add_argument('--seed',type=int,default=0)
     parser.add_argument('--save_checkpoint_all',action='store_true',default=True)
 
@@ -68,17 +67,13 @@ if __name__ == '__main__':
    
     args = parser.parse_args()
     args = args.__dict__
-    
-    torch.cuda.set_device(args['device'])
-    args['device'] = torch.device(args['device'] if torch.cuda.is_available() else 'cpu')
 
     logger = setup_logger(name=args['stage_2_exp_path'][:],log_file=os.path.join(args['stage_2_exp_path'],'log.log'))
     args['logger'] = logger
 
     setup_seed(args['seed'])
 
-    b = CrossEncoder_Classifier(args)
-    b.eval_stage_1(b.queries_valid,epoch=0)
+    b=Graph_Classifier(args)
+    
     b.train_stage_2()
-
 

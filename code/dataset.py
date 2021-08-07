@@ -314,7 +314,7 @@ class Mention_Dataset(Dataset):
 
 
 class Biosyn_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder,bert_encoder,names_sparse_embedding,names_bert_embedding,bert_ratio,tokenizer,device):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder,bert_encoder,names_sparse_embedding,names_bert_embedding,bert_ratio,tokenizer):
         """
         args:
             name_arrayy: all the name of nodes in a sorted order; str of list
@@ -333,19 +333,18 @@ class Biosyn_Dataset(Dataset):
 
         self.sparse_encoder = sparse_encoder
         self.bert_encoder = bert_encoder# still on the device
-        self.names_sparse_embedding = names_sparse_embedding.to(device)
-        self.names_bert_embedding = names_bert_embedding.to(device)# tensor of shape(num_query, num_names)
+        self.names_sparse_embedding = names_sparse_embedding.cuda()
+        self.names_bert_embedding = names_bert_embedding.cuda()# tensor of shape(num_query, num_names)
         
         self.bert_ratio = bert_ratio
         self.n_bert = int(self.top_k * self.bert_ratio)
         self.n_sparse = self.top_k - self.n_bert
         self.tokenizer = tokenizer
-        self.device = device
 
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding,query_bert_embedding):
 
-        candidates_indices = torch.LongTensor(size=(self.top_k,)).to(self.device)
+        candidates_indices = torch.LongTensor(size=(self.top_k,)).cuda()
         sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()
         _,sparse_indices = torch.sort(sparse_score,descending=True)
         bert_score = (torch.matmul(torch.reshape(query_bert_embedding,shape=(1,-1)),self.names_bert_embedding.transpose(0,1))).squeeze()
@@ -369,10 +368,10 @@ class Biosyn_Dataset(Dataset):
         """
         query = self.query_array[index]
         query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
-        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).to(self.device),torch.squeeze(query_tokens['attention_mask']).to(self.device)
+        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
 
         query_bert_embedding = self.bert_encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device
-        query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).to(self.device)
+        query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
         
         candidates_indices,sparse_score = self.get_candidates_indices(query_sparse_embedding,query_bert_embedding)
         candidates_sparse_score = sparse_score[candidates_indices]
@@ -400,28 +399,21 @@ class Biosyn_Dataset(Dataset):
 
 # do not need to iter with epoches
 class Graph_Dataset(Dataset):
-    def __init__(self,query_array,mention2id,tokenizer,device):
+    def __init__(self,query_array,mention2id,tokenizer):
         super(Graph_Dataset,self).__init__()
         self.query_array = query_array
         self.mention2id = mention2id
         self.tokenizer = tokenizer
-        self.device = device
 
     def __getitem__(self, index):
         query = self.query_array[index]
         query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
-        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).to(self.device),torch.squeeze(query_tokens['attention_mask']).to(self.device)
+        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
         query_index = torch.LongTensor([self.mention2id[query]])
         return query_ids,query_attention_mask,query_index,query
     
     def __len__(self):
         return len(self.query_array)
-
-        
-        
-        
-
-
 
 if __name__ == '__main__':
     load_data()
