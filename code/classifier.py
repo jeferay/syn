@@ -6,6 +6,7 @@ import numpy as np
 from scipy import sparse
 import torch
 from torch import nn
+from torch import optim
 from torch.nn import parameter
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import Dataset,DataLoader, dataset
@@ -28,7 +29,7 @@ class Biosyn_Classifier():
         self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'],test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
 
-        self.biosyn_model =Biosyn_Model(model_path = self.args['model_path'],initial_sparse_weight = self.args['initial_sparse_weight'])
+        self.biosyn_model =Biosyn_Model(model_path = self.args['stage_1_model_path'],initial_sparse_weight = self.args['initial_sparse_weight'])
         
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
@@ -71,9 +72,9 @@ class Biosyn_Classifier():
         criterion = marginal_loss
         optimizer = torch.optim.Adam([
             {'params': self.biosyn_model.bert_encoder.parameters()},
-            {'params': self.biosyn_model.sparse_weight, 'lr': 0.01, 'weight_decay': 0}
+            {'params': self.biosyn_model.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
             ], 
-            lr=self.args['lr'], weight_decay=self.args['weight_decay']
+            lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
         )
         
         for epoch in range(1, self.args['epoch_num'] + 1):
@@ -113,7 +114,7 @@ class Biosyn_Classifier():
             
             
             if self.args['save_checkpoint_all'] or epoch == self.args['epoch_num']:
-                checkpoint_dir = os.path.join(self.args['exp_path'], "checkpoint_{}".format(epoch))
+                checkpoint_dir = os.path.join(self.args['stage_1_exp_path'], "checkpoint_{}".format(epoch))
                 if not os.path.exists(checkpoint_dir):
                     os.makedirs(checkpoint_dir)
                 self.save_model(checkpoint_dir)
@@ -140,7 +141,7 @@ class Biosyn_Classifier():
                 query_indices = torch.LongTensor([self.mention2id[query] for query in array]).cuda()
                 accu_1 += (indices[:,0]==query_indices).sum()/len(query_array)
                 accu_k += (indices[:,:self.args['eval_k']]== torch.unsqueeze(query_indices,dim=1)).sum()/len(query_array)
-        self.args['logger'].info("epoch %d done, accu_1 = %.2f, accu_%d = %f"%(epoch,float(accu_1),self.args['eval_k'], float(accu_k)))
+        self.args['logger'].info("epoch %d done, accu_1 = %f, accu_%d = %f"%(epoch,float(accu_1),self.args['eval_k'], float(accu_k)))
         return accu_1,accu_k
         
     def save_model(self,checkpoint_dir):
@@ -308,7 +309,7 @@ class Graph_Classifier():
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
         sparse_feature_size = torch.FloatTensor(self.sparse_encoder.transform(self.queries_test).toarray()).shape[1]
-        self.graphsage_model = Graphsage_Model(feature_size = 768 + sparse_feature_size,hidden_size=256,output_size=768,
+        self.graphsage_model = Graphsage_Model(feature_size = 768 + sparse_feature_size,hidden_size=256,output_size=768 + sparse_feature_size,# modify
         model_path=self.args['stage_2_model_path'],sparse_encoder=self.sparse_encoder)
         
     
@@ -331,7 +332,7 @@ class Graph_Classifier():
     def get_names_embedding(self):
         names_bert_embedding = self.get_names_bert_embedding()
         names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
-        names_embedding = torch.cat((names_bert_embedding,names_sparse_embedding),dim=1)
+        names_embedding = torch.cat((names_bert_embedding,names_sparse_embedding),dim=1)# tensor of shape(N, bert+sparse)
         return names_embedding,names_sparse_embedding,names_bert_embedding# still on the device
 
     
@@ -379,8 +380,8 @@ class Graph_Classifier():
         # get bert fixed
         optimizer = torch.optim.AdamW([
             #{'params': self.graphsage_model.bert_encoder.parameters(),'lr':self.args['bert_lr'],'weight_decay':self.args['bert_weight_decay']},
-            {'params': self.graphsage_model.sage1.parameters(),'lr':0.001,'weight_decay':0},
-            {'params': self.graphsage_model.sage2.parameters(),'lr':0.001,'weight_decay':0},
+            {'params': self.graphsage_model.sage1.parameters(),'lr':1e-5,'weight_decay':1e-3},
+            {'params': self.graphsage_model.sage2.parameters(),'lr':1e-5,'weight_decay':1e-3},
             #{'params': self.graphsage_model.sparse_weight, 'lr': 0.01, 'weight_decay': 0},
             {'params': self.graphsage_model.score_network.parameters(),'lr':0.001}
             ]
@@ -435,6 +436,7 @@ class Graph_Classifier():
             print('loss_sum')
             print(loss_sum)
             accu_1,accu_k = self.eval_stage_2(self.queries_valid,epoch=epoch)
+            self.eval_stage_2(self.queries_train,epoch=epoch)
     
     @torch.no_grad()
     def eval_stage_2(self,query_array,epoch,load_model = False):
@@ -475,7 +477,9 @@ class Graph_Classifier():
                     )
 
                 sorted_score,preds = torch.sort(outputs,descending=True)
-                if iteration == int(len(eval_dataset)/batch_size):
+                if iteration == int(len(eval_dataset)/batch_size) - 1:
+                    print('---sorted score')
+                    print(sorted_score)
                     print('---preds---')
                     print(preds.shape)
                     print(preds)
@@ -530,11 +534,6 @@ class Graph_Classifier():
         return labels
 
 
-        
-
-
-
-
 
 class CrossEncoder_Classifier():
     def __init__(self,args):
@@ -549,14 +548,15 @@ class CrossEncoder_Classifier():
         self.bert_candidate_generator =Bert_Candidate_Generator(model_path = self.args['stage_1_model_path'],initial_sparse_weight = self.args['initial_sparse_weight'])
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
+        sparse_feature_size = torch.FloatTensor(self.sparse_encoder.transform(self.queries_test).toarray()).shape[1]
 
         # the entire stage_2 model
-        self.bert_cross_encoder = Bert_Cross_Encoder(model_path = self.args['stage_2_model_path'])
+        self.bert_cross_encoder = Bert_Cross_Encoder(model_path = self.args['stage_2_model_path'],feature_size=768+sparse_feature_size,sparse_encoder=self.sparse_encoder)
 
 
     #we can not put all the names bert in the calculation graph, otherwise we will get an out of memory error
     @torch.no_grad()
-    def get_names_bert_embedding_stage1(self):
+    def get_names_bert_embedding(self):
         names_dataset = Mention_Dataset(self.name_array,self.tokenizer)
         names_bert_embedding = []
         data_loader = DataLoader(dataset=names_dataset,batch_size=1024)
@@ -568,6 +568,10 @@ class CrossEncoder_Classifier():
             
         names_bert_embedding = torch.cat(names_bert_embedding, dim=0)# len(mentions) * hidden_size
         return names_bert_embedding# still on the device
+    
+    def get_names_sparse_embedding(self):
+        names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
+        return names_sparse_embedding# still on device
     
 
     @torch.no_grad()
@@ -635,21 +639,21 @@ class CrossEncoder_Classifier():
         return candidates_indices,candidates_sparse_score#tensors of shape(batch,top_k)
 
     def train_stage_1(self):
-        print('stage_1_training')
+        self.args['logger'].info('stage_1_training')
         train_dataset = Graph_Dataset(query_array=self.queries_train,mention2id=self.mention2id,tokenizer=self.tokenizer)
         train_loader = DataLoader(dataset=train_dataset,batch_size=self.args['batch_size'],shuffle=False)
         criterion = nn.CrossEntropyLoss(reduction='sum')# take it as an multi class task
         
         optimizer = torch.optim.Adam([
             {'params': self.bert_candidate_generator.bert_encoder.parameters()},
-            {'params': self.bert_candidate_generator.sparse_weight, 'lr': 0.1, 'weight_decay': 0}
+            {'params': self.bert_candidate_generator.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
             ], 
             lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
         )
         for epoch in range(1,self.args['epoch_num'] + 1):
             #every epoch we recalculate the embeddings which have been updated
-            names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
-            names_bert_embedding = self.get_names_bert_embedding_stage1()# tensor of shape(N,768)
+            names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
+            names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N, sparse_feature_size)
             self.bert_candidate_generator.train()
             loss_sum = 0
             for iteration,(batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query) in tqdm(enumerate(train_loader),total=len(train_loader)):
@@ -675,7 +679,7 @@ class CrossEncoder_Classifier():
                     candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask,
                     candidates_sparse_score=candidates_sparse_score
                     )
-                print(labels)
+                #print(labels)
                 assert((labels==-1).sum()==0)
                 loss = criterion(outputs,labels)
 
@@ -685,13 +689,17 @@ class CrossEncoder_Classifier():
                 loss_sum/=len(self.queries_train)
             
             accu_1,accu_k = self.eval_stage_1(query_array=self.queries_valid,epoch=epoch)
-            
+        
+        checkpoint_dir = os.path.join(self.agrs['stage_1_exp_path'],'epoch%d'%self.args['epoch_num'])
+        self.save_model_satge_1(checkpoint_dir)
+
     @torch.no_grad()
     def eval_stage_1(self,query_array,epoch,load_model = False):
         
         self.bert_candidate_generator.eval()
-        names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
-        names_bert_embedding = self.get_names_bert_embedding_stage1()# tensor of shape(N,768)
+        names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
+        names_sparse_embedding = self.get_names_sparse_embedding()
+        
         eval_dataset = Graph_Dataset(query_array=query_array,mention2id=self.mention2id,tokenizer=self.tokenizer)
         eval_loader = DataLoader(dataset=eval_dataset,batch_size = 1024,shuffle=False)
         
@@ -721,35 +729,36 @@ class CrossEncoder_Classifier():
         return accu_1,accu_k
     
     
-    def adjust_learning_rate(self,optimizer, epoch):
-        """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-        lr =  0.01 * (0.1 ** (epoch // 5))
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+    def save_model_stage_1(self,checkpoint_dir):
+        self.bert_candidate_generator.bert_encoder.save_pretrained(checkpoint_dir)
+        torch.save(self.bert_candidate_generator.sparse_weight,os.path.join(checkpoint_dir,'sparse_weight.pth'))
+        self.args['logger'].info('stage 1 model saved at %s'%checkpoint_dir)
 
     def train_stage_2(self):
         # we need to load stage 1 model before stage 2 training
         self.bert_candidate_generator.load_model(model_path=self.args['stage_1_model_path'])
 
-        print('stage_2_training')
+        self.args['logger'].info('stage_2_training')
 
         train_dataset = Graph_Dataset(query_array=self.queries_train,mention2id=self.mention2id,tokenizer=self.tokenizer)
         train_loader = DataLoader(dataset=train_dataset,batch_size=self.args['batch_size'],shuffle=False)
         criterion = nn.CrossEntropyLoss(reduction='sum')# take it as an multi class task
         
         optimizer = torch.optim.AdamW([
-            #{'params': self.bert_cross_encoder.bert_encoder.parameters(),'lr':1e-5,'weight_decay':5e-6},
-            {'params': self.bert_cross_encoder.linear.parameters(), 'lr': 0.001, 'weight_decay': 0}
+            {'params': self.bert_cross_encoder.bert_encoder.parameters(),'lr':1e-5,'weight_decay':0},
+            {'params': self.bert_cross_encoder.score_network.parameters(), 'lr': 0.001, 'weight_decay': 0}
             ]
         )
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer,mode='max',patience = 3,factor=0.35)
+
 
         # the stage_1 model is fixed during stage 2, we do not need to recalculate them
-        names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
-        names_bert_embedding = self.get_names_bert_embedding_stage1()# tensor of shape(N,768)
+        names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N,hidden)
+        names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
         for epoch in range(1,self.args['epoch_num'] + 1):
             
             #self.adjust_learning_rate(optimizer,epoch)
-            #print(optimizer.param_groups[0]['lr'])
+            print(optimizer.param_groups[0]['lr'])
             self.bert_cross_encoder.train()
             
             loss_sum = 0
@@ -783,7 +792,8 @@ class CrossEncoder_Classifier():
                 
                 outputs = self.bert_cross_encoder.forward(
                     query_ids=batch_query_ids,query_attention_mask=batch_query_attention_mask,
-                    candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask)
+                    candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask,
+                    query=batch_query,names_sparse_embedding = names_sparse_embedding,candidates_indices = candidates_indices)
                 
                 # when training, ground truth is included in the candidates
 
@@ -799,13 +809,17 @@ class CrossEncoder_Classifier():
             print('loss_sum')
             print(loss_sum)
             accu_1,accu_k = self.eval_stage_2(self.queries_valid,epoch=epoch)
-    
+            scheduler.step(accu_1)
+
+        checkpoint_dir = os.path.join(self.agrs['stage_2_exp_path'],'epoch%d'%self.args['epoch_num'])
+        self.save_model_satge_2(checkpoint_dir)
+
     @torch.no_grad()
     def eval_stage_2(self,query_array,epoch,load_model = False):
         self.bert_candidate_generator.eval()
         self.bert_cross_encoder.eval()
-        names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()# tensor of shape(N,hidden)
-        names_bert_embedding = self.get_names_bert_embedding_stage1()# tensor of shape(N,768)
+        names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N,hidden)
+        names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
         eval_dataset = Graph_Dataset(query_array=query_array,mention2id=self.mention2id,tokenizer=self.tokenizer)
         eval_loader = DataLoader(dataset=eval_dataset,batch_size = 1024,shuffle=False)
         
@@ -839,7 +853,8 @@ class CrossEncoder_Classifier():
                 
                 outputs = self.bert_cross_encoder.forward(
                     query_ids=batch_query_ids,query_attention_mask=batch_query_attention_mask,
-                    candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask)
+                    candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask,
+                    query=batch_query,names_sparse_embedding = names_sparse_embedding,candidates_indices = candidates_indices)
 
                 sorted_score,preds = torch.sort(outputs,descending=True)
                 if iteration == int(len(eval_dataset)/batch_size):
@@ -862,6 +877,12 @@ class CrossEncoder_Classifier():
         
         self.args['logger'].info("epoch %d done, accu_1 = %f, accu_%d = %f"%(epoch,float(accu_1),self.args['eval_k'], float(accu_k)))
         return accu_1,accu_k
+
+    def save_model_stage_2(self,checkpoint_dir):
+        self.bert_cross_encoder.bert_encoder.save_pretrained(checkpoint_dir)
+        
+        torch.save(self.bert_cross_encoder.score_network.state_dict(),os.path.join(checkpoint_dir,'score_network.pth'))
+        self.args['logger'].info('stage_2_model saved at %s'%checkpoint_dir)
 
     def get_batch_inputs_for_stage_1(self,batch_size,candidates_indices):
         candidates_ids,candidates_attention_mask = [],[]
@@ -916,6 +937,7 @@ class CrossEncoder_Classifier():
         batch_pair_ids = torch.cat(batch_pair_ids,dim=0).cuda()
         batch_pair_attn_mask = torch.cat(batch_pair_attn_mask,dim=0).cuda()
         batch_pair_type_ids = torch.cat(batch_pair_type_ids,dim=0).cuda()
+
         return batch_pair_ids,batch_pair_attn_mask,batch_pair_type_ids
 
 
