@@ -90,7 +90,7 @@ class Graphsage_Model(torch.nn.Module):
         score = []
         for k in range(top_k):
             k_indices = candidates_indices[:,k]# the ith index for every query, tensor of shape(batch,)
-            k_candidate_graph_embedding = names_embedding[k_indices]# tensor of shape(batch,hidden)# modify
+            k_candidate_graph_embedding = names_graph_embedding[k_indices]# tensor of shape(batch,hidden)# modify
             k_candidate_graph_embedding= torch.unsqueeze(k_candidate_graph_embedding,dim=2)# tensor of shape(batch.hidden,1)
         
             k_linear = self.score_network(query_embedding)

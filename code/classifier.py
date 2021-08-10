@@ -156,6 +156,7 @@ class Biosyn_Classifier():
         
             
 
+# not useful
 class Graphsage_Classifier():
     def __init__(self,args):
         self.args = args
@@ -689,8 +690,7 @@ class CrossEncoder_Classifier():
                 loss_sum/=len(self.queries_train)
             
             accu_1,accu_k = self.eval_stage_1(query_array=self.queries_valid,epoch=epoch)
-        
-        checkpoint_dir = os.path.join(self.agrs['stage_1_exp_path'],'epoch%d'%self.args['epoch_num'])
+        checkpoint_dir = os.path.join(self.args['stage_1_exp_path'],'epoch%d'%self.args['epoch_num'])
         self.save_model_satge_1(checkpoint_dir)
 
     @torch.no_grad()
@@ -811,7 +811,7 @@ class CrossEncoder_Classifier():
             accu_1,accu_k = self.eval_stage_2(self.queries_valid,epoch=epoch)
             scheduler.step(accu_1)
 
-        checkpoint_dir = os.path.join(self.agrs['stage_2_exp_path'],'epoch%d'%self.args['epoch_num'])
+        checkpoint_dir = os.path.join(self.args['stage_2_exp_path'],'epoch%d'%self.args['epoch_num'])
         self.save_model_satge_2(checkpoint_dir)
 
     @torch.no_grad()
