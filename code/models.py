@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from sklearn.preprocessing import StandardScaler
 
+from utils import TimeIt
+
 class Biosyn_Model(nn.Module):
     def __init__(self,model_path,initial_sparse_weight):
         super(Biosyn_Model,self).__init__()
@@ -66,6 +68,11 @@ class Graphsage_Model(torch.nn.Module):
             nn.Linear(in_features=256,out_features=output_size)
         ).cuda()
 
+        ########################
+        list(self.score_network.modules())[0][0].weight.data.normal_(0, 1e-3)
+        list(self.score_network.modules())[0][-1].weight.data.normal_(0, 1e-3)
+        ########################
+
         
        
 
@@ -90,7 +97,7 @@ class Graphsage_Model(torch.nn.Module):
         score = []
         for k in range(top_k):
             k_indices = candidates_indices[:,k]# the ith index for every query, tensor of shape(batch,)
-            k_candidate_graph_embedding = names_graph_embedding[k_indices]# tensor of shape(batch,hidden)# modify
+            k_candidate_graph_embedding = names_embedding[k_indices]# tensor of shape(batch,hidden)# modify
             k_candidate_graph_embedding= torch.unsqueeze(k_candidate_graph_embedding,dim=2)# tensor of shape(batch.hidden,1)
         
             k_linear = self.score_network(query_embedding)
@@ -111,8 +118,16 @@ class Bert_Candidate_Generator(nn.Module):
         state_dict = torch.load(os.path.join(model_path, "pytorch_model.bin"))
         self.bert_encoder.load_state_dict(state_dict,False)
         self.bert_encoder = self.bert_encoder.cuda()
-        self.sparse_weight = nn.Parameter(torch.empty(1).cuda(),requires_grad=True)
-        self.sparse_weight.data.fill_(initial_sparse_weight)
+        if initial_sparse_weight == 0:
+            self.sparse_weight = 0
+        else:
+            self.sparse_weight = nn.Parameter(torch.empty(1).cuda(),requires_grad=True)
+            self.sparse_weight.data.fill_(initial_sparse_weight)
+
+        self._cls_bn = nn.BatchNorm1d(num_features=1).cuda()
+
+    def cls_bn(self, x):
+        return self._cls_bn(x.unsqueeze(1)).squeeze(1)
     
     # load a fine tuned model
     def load_model(self,model_path):
@@ -127,6 +142,9 @@ class Bert_Candidate_Generator(nn.Module):
             candidates_names_attention_mask: batch * top_k * max_len
             candidates_sparse_score: batch * top_k
         """
+        # print('query_ids', query_ids)
+        # print('query_attention_mask', query_attention_mask)
+
         query_embedding = self.bert_encoder(query_ids,query_attention_mask).last_hidden_state[:,0,:]
         candidiate_names_bert_embedding = []
         for i in range(candidates_ids.shape[1]):#top_k
@@ -137,7 +155,12 @@ class Bert_Candidate_Generator(nn.Module):
         candidiate_names_bert_embedding = torch.stack(candidiate_names_bert_embedding,dim = 1)# tensor of shape(batch, top_k, hidden_size)
 
         query_embedding = torch.unsqueeze(query_embedding,dim=1)#batch * 1 *hidden_size
-        bert_score = torch.bmm(query_embedding, candidiate_names_bert_embedding.transpose(dim0=1,dim1=2)).squeeze()# batch * top_k
+        bert_score = torch.bmm(query_embedding, candidiate_names_bert_embedding.transpose(dim0=1,dim1=2)).squeeze(1)# batch * top_k
+
+        # print('query embedding', query_embedding)
+        # print('candidiate_names_graph_embedding', candidiate_names_bert_embedding)
+
+        bert_score = self.cls_bn(bert_score)
 
         score = bert_score + candidates_sparse_score * self.sparse_weight
         return score
@@ -157,6 +180,12 @@ class Bert_Cross_Encoder(nn.Module):
             nn.Sigmoid(),
             nn.Linear(in_features=256,out_features=feature_size)
         ).cuda()
+        
+        ########################
+        list(self.score_network.modules())[0][0].weight.data.normal_(0, 1e-3)
+        list(self.score_network.modules())[0][-1].weight.data.normal_(0, 1e-3)
+        ########################
+        
         self.sparse_encoder = sparse_encoder
 
 
@@ -185,6 +214,9 @@ class Bert_Cross_Encoder(nn.Module):
     
 
     def forward(self,query_ids,query_attention_mask,candidates_ids,candidates_attention_mask,query,names_sparse_embedding,candidates_indices):
+        # print('query_ids', query_ids)
+        # print('query_attention_mask', query_attention_mask)
+
         query_bert_embedding =  self.bert_encoder(query_ids,query_attention_mask).last_hidden_state[:,0,:]
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(query).toarray()).cuda()
         query_embedding = torch.cat((query_bert_embedding,query_sparse_embedding), dim =1)# tensor of shape(batch,bert_size + sparse_size)
@@ -202,6 +234,8 @@ class Bert_Cross_Encoder(nn.Module):
 
             candidiate_names_embedding.append(k_embedding)
         candidiate_names_embedding = torch.stack(candidiate_names_embedding,dim = 1)# tensor of shape(batch, top_k, hidden_size)
+        # print('query embedding', query_embedding)
+        # print('candidiate_names_graph_embedding', candidiate_names_graph_embedding)
 
         #candidiate_names_bert_embedding = F.dropout(candidiate_names_bert_embedding,0.3)
         top_k = candidates_ids.shape[1]
@@ -215,7 +249,6 @@ class Bert_Cross_Encoder(nn.Module):
             score.append(k_score)
         score = torch.cat(score,dim=1)# tensor of shape(batch,top_k)
         return score
-
 
 
 

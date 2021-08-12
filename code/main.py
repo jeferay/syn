@@ -1,3 +1,4 @@
+from ast import parse
 import numpy as np
 import random
 import os
@@ -76,9 +77,12 @@ if __name__ == '__main__':
     #b= Graph_Classifier(args)
     
     b=CrossEncoder_Classifier(args)
-    #b.save_model_satge_1(os.path.join(args['stage_1_exp_path'],'checkpoint'))
+    #b.save_model_stage_1(os.path.join(args['stage_1_exp_path'],'checkpoint'))
     #b.save_model_stage_2(checkpoint_dir=os.path.join(args['stage_2_exp_path'],'checkpoint'))
 
     b.eval_stage_1(b.queries_valid,epoch=0)
     b.train_stage_1()
+
+    b.eval_stage_2(b.queries_valid, epoch=0)
+    b.train_stage_2()
 

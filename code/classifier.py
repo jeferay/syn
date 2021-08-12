@@ -20,6 +20,8 @@ from transformers import *
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 
+from utils import TimeIt
+
 class Biosyn_Classifier():
     def __init__(self,args):
         self.args = args
@@ -156,7 +158,6 @@ class Biosyn_Classifier():
         
             
 
-# not useful
 class Graphsage_Classifier():
     def __init__(self,args):
         self.args = args
@@ -613,13 +614,13 @@ class CrossEncoder_Classifier():
         candidates_sparse_score = torch.cat(candidates_sparse_score,dim=0).cuda()# shape(batch,top_k)
         return candidates_indices,candidates_sparse_score#tensors of shape(batch,top_k)
 
-
     @torch.no_grad()# with pretrained and fine tuned bert model, we could get candidates with about 80 accu_k
     def candidates_retrieve_mix(self,batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query,names_sparse_embedding,names_bert_embedding,top_k,is_training):
         batch_query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(batch_query).toarray()).cuda()# tensor of shape(batch,hidden)
         batch_query_bert_embedding = self.bert_candidate_generator.bert_encoder(batch_query_ids,batch_query_attention_mask).last_hidden_state[:,0,:]# shape of (batch,hidden_size)
         sparse_score = torch.matmul(batch_query_sparse_embedding,torch.transpose(names_sparse_embedding,dim0=0,dim1=1))# tensor of shape(batch,N)
         bert_score = torch.matmul(batch_query_bert_embedding,torch.transpose(names_bert_embedding,dim0=0,dim1=1))
+        bert_score = self.bert_candidate_generator.cls_bn(bert_score)
         score = self.bert_candidate_generator.sparse_weight * sparse_score + bert_score# shape(batch,N)
         sorted_score,candidates_indices =torch.sort(score,descending=True)# descending
         candidates_indices = candidates_indices[:,:top_k]
@@ -642,56 +643,87 @@ class CrossEncoder_Classifier():
     def train_stage_1(self):
         self.args['logger'].info('stage_1_training')
         train_dataset = Graph_Dataset(query_array=self.queries_train,mention2id=self.mention2id,tokenizer=self.tokenizer)
-        train_loader = DataLoader(dataset=train_dataset,batch_size=self.args['batch_size'],shuffle=False)
+        train_loader = DataLoader(dataset=train_dataset,batch_size=self.args['batch_size'],shuffle=True, drop_last=True) ###########
         criterion = nn.CrossEntropyLoss(reduction='sum')# take it as an multi class task
         
-        optimizer = torch.optim.Adam([
-            {'params': self.bert_candidate_generator.bert_encoder.parameters()},
-            {'params': self.bert_candidate_generator.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
-            ], 
-            lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
-        )
+        if self.args['initial_sparse_weight'] != 0:
+            optimizer = torch.optim.Adam([
+                {'params': self.bert_candidate_generator.bert_encoder.parameters()},
+                {'params': self.bert_candidate_generator.sparse_weight, 'lr': 0.001, 'weight_decay': 0},
+                {'params': self.bert_candidate_generator._cls_bn.parameters(), 'lr': 0.001},
+                ], 
+                lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
+            )
+        else:
+            optimizer = torch.optim.Adam([
+                {'params': self.bert_candidate_generator.bert_encoder.parameters()},
+                {'params': self.bert_candidate_generator._cls_bn.parameters(), 'lr': 0.001},
+                ], 
+                lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
+            )
+        t_total = self.args['epoch_num'] * len(train_loader)
+        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=t_total)
+
         for epoch in range(1,self.args['epoch_num'] + 1):
-            #every epoch we recalculate the embeddings which have been updated
-            names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
-            names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N, sparse_feature_size)
+            # #every epoch we recalculate the embeddings which have been updated
+            # names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
+            # names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N, sparse_feature_size)
             self.bert_candidate_generator.train()
             loss_sum = 0
-            for iteration,(batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query) in tqdm(enumerate(train_loader),total=len(train_loader)):
+            pbar = tqdm(enumerate(train_loader),total=len(train_loader))
+            for iteration,(batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query) in pbar:
+                if iteration % 100 == 0:
+                    with TimeIt('get emb'):
+                        names_bert_embedding = self.get_names_bert_embedding()# tensor of shape(N,768)
+                        names_sparse_embedding = self.get_names_sparse_embedding()# tensor of shape(N, sparse_feature_size)
             
                 optimizer.zero_grad()
-                batch_query_ids = batch_query_ids.cuda()
-                batch_query_attention_mask = batch_query_attention_mask.cuda()
-                batch_query_index =batch_query_index.cuda().squeeze(dim=1)
-                batch_query = np.array(batch_query)
 
-                candidates_indices,candidates_sparse_score = self.candidates_retrieve_separate(
-                    batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query,
-                    names_sparse_embedding,names_bert_embedding,top_k=self.args['top_k'],is_training=True
-                )# tensors of shape (batch,top_k)
+                with TimeIt('make batch'):
+                    batch_query_ids = batch_query_ids.cuda()
+                    batch_query_attention_mask = batch_query_attention_mask.cuda()
+                    batch_query_index =batch_query_index.cuda().squeeze(dim=1)
+                    batch_query = np.array(batch_query)
 
-                batch_size = batch_query_ids.shape[0]
-                labels = self.get_labels(batch_size=batch_size,candidates_indices=candidates_indices,batch_query_index=batch_query_index)
-                candidates_ids,candidates_attention_mask = self.get_batch_inputs_for_stage_1(
-                    batch_size=batch_size,candidates_indices=candidates_indices)
+                with TimeIt('candidates_retrieve_separate'):
+                    candidates_indices,candidates_sparse_score = self.candidates_retrieve_separate(
+                        batch_query_ids, batch_query_attention_mask,batch_query_index,batch_query,
+                        names_sparse_embedding,names_bert_embedding,top_k=self.args['top_k'],is_training=True
+                    )# tensors of shape (batch,top_k)
+
+                with TimeIt('get_batch_inputs_for_stage_1'):
+                    batch_size = batch_query_ids.shape[0]
+                    labels = self.get_labels(batch_size=batch_size,candidates_indices=candidates_indices,batch_query_index=batch_query_index)
+                    candidates_ids,candidates_attention_mask = self.get_batch_inputs_for_stage_1(
+                        batch_size=batch_size,candidates_indices=candidates_indices)
                 
-                outputs = self.bert_candidate_generator.forward(
-                    query_ids=batch_query_ids,query_attention_mask=batch_query_attention_mask,
-                    candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask,
-                    candidates_sparse_score=candidates_sparse_score
-                    )
-                #print(labels)
-                assert((labels==-1).sum()==0)
-                loss = criterion(outputs,labels)
+                with TimeIt('bert_candidate_generator'):
+                    outputs = self.bert_candidate_generator.forward(
+                        query_ids=batch_query_ids,query_attention_mask=batch_query_attention_mask,
+                        candidates_ids=candidates_ids,candidates_attention_mask=candidates_attention_mask,
+                        candidates_sparse_score=candidates_sparse_score
+                        )
+                    #print(labels)
+                    assert((labels==-1).sum()==0)
+                    loss = criterion(outputs,labels)
 
-                loss_sum+=loss.item()
-                loss.backward()
-                optimizer.step()
-                loss_sum/=len(self.queries_train)
-            
+                with TimeIt('optimizer'):
+                    loss_sum+=loss.item()
+                    loss.backward()
+                    optimizer.step()
+                    scheduler.step()
+                    loss_sum/=len(self.queries_train)
+
+                m, M, mean, std = outputs.min(), outputs.max(), outputs.mean(), outputs.std()
+                pbar.set_postfix({"loss": float(loss), "[min, max, mean, std]": ['%.2e'%i for i in [m, M, mean, std]], "lr":['%.2e'%group["lr"] for group in optimizer.param_groups]})
+
+                if True: break
+
             accu_1,accu_k = self.eval_stage_1(query_array=self.queries_valid,epoch=epoch)
+            print('loss_sum:', float(loss_sum))
+        
         checkpoint_dir = os.path.join(self.args['stage_1_exp_path'],'epoch%d'%self.args['epoch_num'])
-        self.save_model_satge_1(checkpoint_dir)
+        self.save_model_stage_1(checkpoint_dir)
 
     @torch.no_grad()
     def eval_stage_1(self,query_array,epoch,load_model = False):
@@ -744,6 +776,8 @@ class CrossEncoder_Classifier():
         train_loader = DataLoader(dataset=train_dataset,batch_size=self.args['batch_size'],shuffle=False)
         criterion = nn.CrossEntropyLoss(reduction='sum')# take it as an multi class task
         
+
+        ################# todo! 
         optimizer = torch.optim.AdamW([
             {'params': self.bert_cross_encoder.bert_encoder.parameters(),'lr':1e-5,'weight_decay':0},
             {'params': self.bert_cross_encoder.score_network.parameters(), 'lr': 0.001, 'weight_decay': 0}
@@ -812,7 +846,7 @@ class CrossEncoder_Classifier():
             scheduler.step(accu_1)
 
         checkpoint_dir = os.path.join(self.args['stage_2_exp_path'],'epoch%d'%self.args['epoch_num'])
-        self.save_model_satge_2(checkpoint_dir)
+        self.save_model_stage_2(checkpoint_dir)
 
     @torch.no_grad()
     def eval_stage_2(self,query_array,epoch,load_model = False):
