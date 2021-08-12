@@ -66,8 +66,6 @@ class Graphsage_Model(torch.nn.Module):
             nn.Linear(in_features=256,out_features=output_size)
         ).cuda()
 
-        
-       
 
     def load_pretrained_model(self,model_path):
         state_dict = torch.load(os.path.join(model_path, "pytorch_model.bin"))

@@ -5,10 +5,7 @@ import torch
 import logging
 import argparse
 
-from classifier import  Biosyn_Classifier, Graphsage_Classifier,CrossEncoder_Classifier,Graph_Classifier
-
-
-
+from classifier import  Biosyn_Classifier, Graphsage_Classifier,CrossEncoder_Classifier,Graph_Classifier, BNE_Classifier
 
 #set up seed         
 def setup_seed(seed):
@@ -39,6 +36,7 @@ def setup_logger(name, log_file, level=logging.INFO):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--filename',type=str,default='../data/datasets/cl.obo')
+    parser.add_argument('--classifier_name',type=str,default='graphsage')
     parser.add_argument('--use_text_preprocesser',action='store_true',default=False)
     parser.add_argument('--is_unseen',action='store_true',default=True)
     parser.add_argument('--stage_1_model_path',type=str,default='../biobert')
@@ -74,8 +72,11 @@ if __name__ == '__main__':
     setup_seed(args['seed'])
     
     #b= Graph_Classifier(args)
+    if args['classifier_name'] == 'bne':
+        b = BNE_Classifier(args)
     
-    b=CrossEncoder_Classifier(args)
+    
+    
     #b.save_model_satge_1(os.path.join(args['stage_1_exp_path'],'checkpoint'))
     #b.save_model_stage_2(checkpoint_dir=os.path.join(args['stage_2_exp_path'],'checkpoint'))
 
