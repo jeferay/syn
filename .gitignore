@@ -3,3 +3,4 @@ code/biobert/
 exp/
 biobert/
 bne_embeddings/
+bne_resources/embeddings/
