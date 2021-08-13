@@ -67,14 +67,18 @@ if __name__ == '__main__':
 
     logger = setup_logger(name=args['stage_2_exp_path'][:],log_file=os.path.join(args['stage_2_exp_path'],'log.log'))
     args['logger'] = logger
-    print(args)
+    
+    print("Experiment arguments are: ", args)
 
     setup_seed(args['seed'])
     
     #b= Graph_Classifier(args)
     if args['classifier_name'] == 'bne':
         b = BNE_Classifier(args)
-    
+        b.train()
+        b.eval()
+    elif args['classifier_name'] == 'graphsage':
+        b = Graph_Classifier(args)
     
     
     #b.save_model_satge_1(os.path.join(args['stage_1_exp_path'],'checkpoint'))

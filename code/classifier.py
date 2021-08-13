@@ -972,7 +972,7 @@ class BNE_Classifier():
     def get_mention_array_bert_embedding(self,mention_array):
         
         # use dataset to help embed the mention_array
-        self.biosyn_model.eval()# 进入eval模式
+        self.biosyn_model.eval()# Enter Eval Mode
         
         mention_dataset = Mention_Dataset(mention_array,self.tokenizer)
         mentions_embedding = []
@@ -987,7 +987,7 @@ class BNE_Classifier():
             mentions_embedding = torch.cat(mentions_embedding, dim=0)# len(mentions) * hidden_size
             #print(mentions_embedding.shape)
         
-        return mentions_embedding# still on the device
+        return mentions_embedding # still on the device
 
     # this function will use too much memory, so we calculate the score for single batch
     def get_score_matrix(self,query_array):
@@ -1021,7 +1021,7 @@ class BNE_Classifier():
 
             biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
             sparse_encoder=self.sparse_encoder,bert_encoder=self.biosyn_model.bert_encoder,
-            names_sparse_embedding=names_sparse_embedding,names_bert_embedding=names_bert_embedding, 
+            names_sparse_embedding=names_sparse_embedding,names_bert_embedding = names_bert_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
             data_loader = DataLoader(dataset=biosyn_dataset,batch_size=self.args['batch_size'])
@@ -1030,12 +1030,20 @@ class BNE_Classifier():
                 optimizer.zero_grad()
 
                 query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels = batch_data
+    
                 query_ids = query_ids.cuda()
                 query_attention_mask = query_attention_mask.cuda()
                 candidates_names_ids = candidates_names_ids.cuda()
                 candidates_names_attention_mask = candidates_names_attention_mask.cuda()
                 candidates_sparse_score = candidates_sparse_score.cuda()
                 labels = labels.cuda()
+                
+                #print(query_ids.shape)
+                #print(query_attention_mask)
+                #print(candidates_names_ids.shape)
+                #print(candidates_names_attention_mask.shape)
+                #print(candidates_sparse_score.shape)
+
                 score = self.biosyn_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
                 
                 loss = criterion(score,labels)
@@ -1053,7 +1061,7 @@ class BNE_Classifier():
                     os.makedirs(checkpoint_dir)
                 self.save_model(checkpoint_dir)
             
-            accu_1,accu_k = self.eval(self.queries_valid,epoch = epoch)  
+            accu_1, accu_k = self.eval(self.queries_valid,epoch = epoch)  
 
     #@torch.no_grad()
     def eval(self,query_array,load_model=False,epoch = 0):
@@ -1071,7 +1079,7 @@ class BNE_Classifier():
                     score_matrix = sparse_score_matrix
                 else:
                     score_matrix = bert_score_matrix
-                sorted,indices = torch.sort(score_matrix,descending=True)# 降序，重要
+                sorted,indices = torch.sort(score_matrix,descending=True) # Descending, important
                 query_indices = torch.LongTensor([self.mention2id[query] for query in array]).cuda()
                 accu_1 += (indices[:,0]==query_indices).sum()/len(query_array)
                 accu_k += (indices[:,:self.args['eval_k']]== torch.unsqueeze(query_indices,dim=1)).sum()/len(query_array)
