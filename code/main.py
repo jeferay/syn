@@ -59,9 +59,9 @@ if __name__ == '__main__':
     parser.add_argument('--score_mode',type=str,default='hybrid')
     parser.add_argument('--seed',type=int,default=0)
     parser.add_argument('--save_checkpoint_all',action='store_true',default=False)
+    parser.add_argument('--emb_type',type=str,default='bert')
 
     
-   
     args = parser.parse_args()
     args = args.__dict__
 
