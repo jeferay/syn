@@ -1024,7 +1024,6 @@ class BNE_Classifier():
             for idx, (input_ids, attention_mask) in enumerate(mention_dataloader):
                 print(input_ids.shape)
                 input_ids = input_ids.cuda()
-                input_ids = torch.cat(input_ids)
                 attention_mask = attention_mask.cuda()
                 # Get class embeddings here using the tensorflow routine
                 batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids)
