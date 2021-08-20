@@ -1024,15 +1024,16 @@ class BNE_Classifier():
         with torch.no_grad():
             for idx, (input_ids, attention_mask) in enumerate(mention_dataloader):
                 input_ids_complete_list.append(input_ids)
-            print(type(input_ids_complete_list))
+
+            input_ids_complete_list = torch.cat(input_ids_complete_list,0)  
             input_ids_complete_list = input_ids_complete_list.cuda()
             # Get cumulative embeddings using tensorflow 1.x routine
-            batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids)
+            batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids_complete_list)
             cls_embedding = do_tensorflow_routine(path_name_file)
-            
-            mentions_embedding.append(cls_embedding)
 
-        mentions_embedding = torch.cat(mentions_embedding, dim=0)
+            
+            #mentions_embedding.append(cls_embedding)
+        mentions_embedding = cls_embedding
         print("Shape of Mentions Embeddings - ", mentions_embedding.shape)
         return mentions_embedding
 
@@ -1128,10 +1129,13 @@ class BNE_Classifier():
 
         with torch.no_grad():
             eval_dataloader = DataLoader(dataset=query_array,batch_size=1024,shuffle=False)
+            print("Length of Eval Dataset - ", len(eval_dataloader.dataset))
+            print("Number of batches in Eval dataset are - ", len(eval_dataloader))
             for array in eval_dataloader:
                 sparse_score_matrix, bert_score_matrix = self.get_score_matrix(array)
                 if self.args['score_mode'] == 'hybrid':
                     score_matrix = self.bne_model.sparse_weight * sparse_score_matrix + bert_score_matrix
+              
                 elif self.args['score_mode'] == 'sparse':
                     score_matrix = sparse_score_matrix
                 else:
