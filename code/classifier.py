@@ -1018,20 +1018,22 @@ class BNE_Classifier():
         mentions_embedding = []
         mention_dataloader = DataLoader(mention_dataset, batch_size = 1024)
         print("Length of Mentions Dataloder is - ", len(mention_dataloader.dataset))
+        input_ids_complete_list = []
         vocab_file = open("../biobert/vocab.txt","r")
         vocab_list = [line.replace("\n","") for line in vocab_file]
         with torch.no_grad():
             for idx, (input_ids, attention_mask) in enumerate(mention_dataloader):
-                print(input_ids.shape)
-                input_ids = input_ids.cuda()
-                attention_mask = attention_mask.cuda()
-                # Get class embeddings here using the tensorflow routine
-                batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids)
-                cls_embedding = do_tensorflow_routine(path_name_file)
-                
-                mentions_embedding.append(cls_embedding)
+                input_ids_complete_list.append(input_ids)
+            print(type(input_ids_complete_list))
+            input_ids_complete_list = input_ids_complete_list.cuda()
+            # Get cumulative embeddings using tensorflow 1.x routine
+            batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids)
+            cls_embedding = do_tensorflow_routine(path_name_file)
+            
+            mentions_embedding.append(cls_embedding)
 
         mentions_embedding = torch.cat(mentions_embedding, dim=0)
+        print("Shape of Mentions Embeddings - ", mentions_embedding.shape)
         return mentions_embedding
 
 
@@ -1077,7 +1079,7 @@ class BNE_Classifier():
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
             data_loader = DataLoader(dataset=biosyn_dataset,batch_size=self.args['batch_size'])
-            for iteration,batch_data in tqdm(enumerate(data_loader),total=len(data_loader)):
+            for iteration, batch_data in tqdm(enumerate(data_loader),total=len(data_loader)):
 
                 optimizer.zero_grad()
 
@@ -1102,6 +1104,8 @@ class BNE_Classifier():
                 loss_sum+=loss.item()
                 loss.backward()
                 optimizer.step()
+                break
+
             
             loss_sum/=len(self.queries_train)
 
@@ -1114,6 +1118,7 @@ class BNE_Classifier():
                 self.save_model(checkpoint_dir)
             
             accu_1, accu_k = self.eval(self.queries_valid,epoch = epoch)  
+            print(accu_1, accu_k)
 
     #@torch.no_grad()
     def eval(self,query_array,load_model=False,epoch = 0):
@@ -1124,14 +1129,14 @@ class BNE_Classifier():
         with torch.no_grad():
             eval_dataloader = DataLoader(dataset=query_array,batch_size=1024,shuffle=False)
             for array in eval_dataloader:
-                sparse_score_matrix,bert_score_matrix = self.get_score_matrix(array)
+                sparse_score_matrix, bert_score_matrix = self.get_score_matrix(array)
                 if self.args['score_mode'] == 'hybrid':
                     score_matrix = self.bne_model.sparse_weight * sparse_score_matrix + bert_score_matrix
                 elif self.args['score_mode'] == 'sparse':
                     score_matrix = sparse_score_matrix
                 else:
                     score_matrix = bert_score_matrix
-                sorted,indices = torch.sort(score_matrix,descending=True) # Descending, important
+                sorted, indices = torch.sort(score_matrix,descending=True) # Descending, important
                 query_indices = torch.LongTensor([self.mention2id[query] for query in array]).cuda()
                 accu_1 += (indices[:,0]==query_indices).sum()/len(query_array)
                 accu_k += (indices[:,:self.args['eval_k']]== torch.unsqueeze(query_indices,dim=1)).sum()/len(query_array)
@@ -1148,32 +1153,3 @@ class BNE_Classifier():
         self.bne_model.bert_encoder.load_state_dict(state_dict,False)
         self.bne_model.sparse_weight = torch.load(os.path.join(model_path,'sparse_weight.pth'))
         
-
-
-
-
-
-
-            
-
-
-
-
-
-
-
-
-
-
-                    
-
-
-
-
-            
-
-
-
-
-
-
