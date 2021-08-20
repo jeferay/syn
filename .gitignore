@@ -4,4 +4,7 @@ exp/
 biobert/
 bne_embeddings/
 bne_resources/embeddings/
-bne_resources/
+bne_resources/models/
+bne_resources/names_bne_SGsc.txt
+bne_resources/umls_names.txt
+bne_resources/temp_files/
