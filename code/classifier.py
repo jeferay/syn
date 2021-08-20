@@ -992,22 +992,48 @@ class BNE_Classifier():
         
         return mentions_embedding # still on the device
 
+    def make_str_batch(self, vocab_list, input_ids,write_to_file = True):
+        input_ids = input_ids.cpu().detach().numpy()
+        batch_size, sentence_length = input_ids.shape
+        batch_sentence = []
+        for batch in input_ids:
+            sentence = ""
+            for id in batch:
+                if id: # non zero ID numbers 
+                    sentence += vocab_list[id]  + " "
+            batch_sentence.append(sentence)  
+        if write_to_file:
+            pth_check  = os.path.join("../","bne_resources","temp_files")
+            if not os.path.exists(pth_check):
+                os.mkdir(pth_check)
+            f = open(os.path.join(pth_check,"names.txt"),"w")
+            for s in batch_sentence:
+                f.write(str(s) + "\n")
+            f.close()
+            path_of_name_file = os.path.join(pth_check,"names.txt")
+        return batch_sentence, path_of_name_file
+            
     def get_bne_embedings(self, mention_array):
-
         mention_dataset = Mention_Dataset(mention_array,self.tokenizer)       
         mentions_embedding = []
         mention_dataloader = DataLoader(mention_dataset, batch_size = 1024)
-
+        print("Length of Mentions Dataloder is - ", len(mention_dataloader.dataset))
+        vocab_file = open("../biobert/vocab.txt","r")
+        vocab_list = [line.replace("\n","") for line in vocab_file]
         with torch.no_grad():
             for idx, (input_ids, attention_mask) in enumerate(mention_dataloader):
+                print(input_ids.shape)
                 input_ids = input_ids.cuda()
+                input_ids = torch.cat(input_ids)
                 attention_mask = attention_mask.cuda()
-                
                 # Get class embeddings here using the tensorflow routine
-                print(input_ids,attention_mask)
-                cls_embedding = do_tensorflow_routine(input_ids,attention_mask)
-                 
+                batch_sentence, path_name_file = self.make_str_batch(vocab_list, input_ids)
+                cls_embedding = do_tensorflow_routine(path_name_file)
+                
                 mentions_embedding.append(cls_embedding)
+
+        mentions_embedding = torch.cat(mentions_embedding, dim=0)
+        return mentions_embedding
 
 
 
@@ -1045,7 +1071,7 @@ class BNE_Classifier():
 
             biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
             sparse_encoder=self.sparse_encoder,bert_encoder=self.bne_model.bert_encoder,
-            names_sparse_embedding=names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
+            names_sparse_embedding=names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
             data_loader = DataLoader(dataset=biosyn_dataset,batch_size=self.args['batch_size'])
