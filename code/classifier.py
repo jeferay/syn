@@ -1042,9 +1042,12 @@ class BNE_Classifier():
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(query_array).toarray()).cuda()
         name_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()
         sparse_score_matrix = torch.matmul(query_sparse_embedding,name_sparse_embedding.transpose(0,1))
-
-        query_bert_embedding = self.get_mention_array_bert_embedding(query_array).cuda()
-        name_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
+        if self.embedding_type == 'bert':
+            query_bert_embedding = self.get_mention_array_bert_embedding(query_array).cuda()
+            name_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
+        elif self.embedding_type == 'bne':
+            query_bert_embedding = self.get_bne_embedings(query_array).cuda()
+            name_bert_embedding = self.get_bne_embedings(self.name_array).cuda()
         bert_score_matrix = torch.matmul(query_bert_embedding,name_bert_embedding.transpose(0,1))
 
         return sparse_score_matrix, bert_score_matrix
