@@ -40,43 +40,24 @@ def rnn_encoder_single_layer(rnn_type, input, seq_len, d_dim, initializer):
         initial_state = {}
         for d in ['forward', 'backward'] if bi_directional else ['forward']:
             with tf.variable_scope(d):
-                cell[d] = tf.contrib.rnn.CoupledInputForgetGateLSTMCell(
-                                            d_dim,
-                                            forget_bias=1.0,
-                                            initializer=initializer,
-                                            state_is_tuple=True)
+                cell[d] = tf.contrib.rnn.CoupledInputForgetGateLSTMCell(d_dim, forget_bias=1.0, initializer=initializer, state_is_tuple=True)
                 
-                i_cell = tf.get_variable(d + 'i_cell',
-                                         shape=[1, d_dim],
-                                         dtype=tf.float32,
-                                         initializer=initializer)
-                i_output = tf.get_variable(d + 'i_output',
-                                           shape=[1, d_dim],
-                                           dtype=tf.float32,
-                                           initializer=initializer)
+                i_cell = tf.get_variable(d + 'i_cell', shape=[1, d_dim], dtype=tf.float32, initializer=initializer)
+                i_output = tf.get_variable(d + 'i_output', shape=[1, d_dim], dtype=tf.float32, initializer=initializer)
+
                 c_states = tf.tile(i_cell, tf.stack([batch_size, 1]))
                 h_states = tf.tile(i_output, tf.stack([batch_size, 1]))
-                initial_state[d] = tf.contrib.rnn.LSTMStateTuple(c_states,
-                                                                 h_states)
+                initial_state[d] = tf.contrib.rnn.LSTMStateTuple(c_states, h_states)
 
         if bi_directional:
             raw_outputs, (fw, bw) = \
-                tf.nn.bidirectional_dynamic_rnn(cell['forward'], cell['backward'],
-                                                input,
-                                                dtype=tf.float32,
-                                                sequence_length=seq_len,
-                                                initial_state_fw=initial_state['forward'],
-                                                initial_state_bw=initial_state['backward'])
+                tf.nn.bidirectional_dynamic_rnn(cell['forward'], cell['backward'], input, dtype=tf.float32, sequence_length=seq_len, initial_state_fw=initial_state['forward'], initial_state_bw=initial_state['backward'])
             raw_outputs = tf.concat(raw_outputs, axis=2)
             final_states = tf.concat([fw.h, bw.h], axis=1)
 
         else:
             raw_outputs, final_states = \
-                tf.nn.dynamic_rnn(cell['forward'],
-                                  input,
-                                  dtype=tf.float32,
-                                  sequence_length=seq_len,
-                                  initial_state=initial_state['forward'])
+                tf.nn.dynamic_rnn(cell['forward'], input, dtype=tf.float32, sequence_length=seq_len, initial_state=initial_state['forward'])
             final_states = final_states.h
     return raw_outputs, final_states
 
@@ -125,8 +106,7 @@ def ffnn(inputs, h_dim, out_dim, n_layer, initializer,
     return y_raw
 
 
-def create_mixed_trainable_emb(dim, n_ws, n_special_ws, initializer,
-                               is_trainable, scope_name):
+def create_mixed_trainable_emb(dim, n_ws, n_special_ws, initializer, is_trainable, scope_name):
     """ Reserve index 0 for non-trainable padding, following by
     n_ws pretrained embeddings and n_special_ws trainable embeddings.
     """
@@ -194,14 +174,7 @@ class BaseModel:
             x_rep = tf.nn.embedding_lookup(ce, x_flat)
 
             with tf.variable_scope('c_encoder'):
-                xc_rep, xc_size, _ = rnn_encoder(
-                        self.params['c_rnn_type'],
-                        x_rep,
-                        x_mask_flat,
-                        self.params['c_h_dim'],
-                        self.params['c_rnn_layers'],
-                        initializer,
-                        self.params['c_pooling'])
+                xc_rep, xc_size, _ = rnn_encoder( self.params['c_rnn_type'], x_rep, x_mask_flat, self.params['c_h_dim'], self.params['c_rnn_layers'], initializer, self.params['c_pooling'])
                 xc_rep = tf.reshape(xc_rep, [dims_2, n_w, xc_size])
 
             xw_fat = tf.reshape(xw, (dims_2, n_w))
@@ -214,14 +187,7 @@ class BaseModel:
                drp_keep, initializer, reuse):
         with tf.variable_scope('encoder', reuse=reuse):
             n_ce = max(self.params['c2id'].values()) + 1
-            ce, _ = create_mixed_trainable_emb(
-                        self.params['ce_dim'],
-                        n_ce - len(RESERVE_TKS),
-                        len(RESERVE_TKS) - 1,
-                        initializer,
-                        True,
-                        'ce'
-                        )
+            ce, _ = create_mixed_trainable_emb(self.params['ce_dim'], n_ce - len(RESERVE_TKS), len(RESERVE_TKS) - 1, initializer, True, 'ce')
 
             n_we = max(self.params['w2id'].values()) + 1
             assert n_we == len(self.params['w2id'])
@@ -239,20 +205,12 @@ class BaseModel:
             self.ignored_vars.append(we_core)
 
             with tf.variable_scope('main_text'):
-                w_rep, _ = self.get_hybrid_emb(x, x_mask, xw,
-                                               ce, we, initializer)
+                w_rep, _ = self.get_hybrid_emb(x, x_mask, xw, ce, we, initializer)
                 w_rep = tf.nn.dropout(w_rep, drp_keep)
 
             with tf.variable_scope('w_encoder'):
                 if self.params['w_encoder'] == 'rnn':
-                    hw, hw_size, h_last = rnn_encoder(
-                                        self.params['w_rnn_type'],
-                                        w_rep,
-                                        xw_mask,
-                                        self.params['w_h_dim'],
-                                        self.params['w_rnn_layers'],
-                                        initializer,
-                                        None)
+                    hw, hw_size, h_last = rnn_encoder(self.params['w_rnn_type'], w_rep, xw_mask, self.params['w_h_dim'], self.params['w_rnn_layers'], initializer, None)
         return hw, hw_size, h_last
 
     def hw_pooling(self, hw, mask, hw_size, out_size, use_l2, initializer,
@@ -305,6 +263,7 @@ class BaseModel:
 
 class NameEncoder(BaseModel):
     def __init__(self, params, session):
+        print("Inside function Definition of Encoder Model ....")
         super().__init__(params, session)
         self.cf = params['tasks']['diff_name']
         self.params = params
@@ -333,8 +292,7 @@ class NameEncoder(BaseModel):
         max_len = max([len(row) for row in data_batch]) + 2
         b_size = len(data_batch)
         chars_per_word = self.params['max_c_per_w'] + 2
-        x, x_mask, xw, xw_mask = self.fill_token_idx(data_batch, b_size,
-                                                     max_len, chars_per_word)
+        x, x_mask, xw, xw_mask = self.fill_token_idx(data_batch, b_size, max_len, chars_per_word)
         data_dict = {
             self.x: x,
             self.x_mask: x_mask,

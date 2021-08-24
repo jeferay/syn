@@ -1105,7 +1105,6 @@ class BNE_Classifier():
                 loss_sum+=loss.item()
                 loss.backward()
                 optimizer.step()
-                break
 
             
             loss_sum/=len(self.queries_train)
@@ -1119,7 +1118,7 @@ class BNE_Classifier():
                 self.save_model(checkpoint_dir)
             
             accu_1, accu_k = self.eval(self.queries_valid,epoch = epoch)  
-            print(accu_1, accu_k)
+            print(accu_1.cpu().data.item(), accu_k.cpu().data.item())
 
     #@torch.no_grad()
     def eval(self,query_array,load_model=False,epoch = 0):
