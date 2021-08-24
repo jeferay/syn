@@ -1075,7 +1075,7 @@ class BNE_Classifier():
                 names_dense_embedding = self.get_bne_embedings(self.name_array).cuda()
 
             biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
-            sparse_encoder=self.sparse_encoder,bert_encoder=self.bne_model.bert_encoder,
+            sparse_encoder=self.sparse_encoder,bert_encoder = self.bne_model.bert_encoder,
             names_sparse_embedding=names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
@@ -1101,6 +1101,8 @@ class BNE_Classifier():
 
                 score = self.bne_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
                 
+                print(score)
+
                 loss = criterion(score,labels)
                 loss_sum+=loss.item()
                 loss.backward()

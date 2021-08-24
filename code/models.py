@@ -224,8 +224,14 @@ class BiLSTM_BNE(nn.Module):
         self.num_layers = num_layers
         self.num_classes = num_classes
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
+        self.fc = nn.Linear(hidden_size * 2, num_classes)
 
     def forward(self, x):
+        h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size) # initial hidden state
+        c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size)
+        out, y = self.lstm(x, (h0, c0))
+        out = self.fc(out[:,-1,:]) # taking the output only at the last time point
+        pass
 
         
         
