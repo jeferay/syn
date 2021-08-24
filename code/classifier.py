@@ -16,7 +16,7 @@ import sys
 sys.path.append("/home/megh/projects/entity-norm/syn/")
 from bne_resources.run_bne_for_pt import * 
 from dataset import Biosyn_Dataset, Graph_Dataset, Mention_Dataset, load_data, data_split
-from models import Biosyn_Model,Graphsage_Model,Bert_Candidate_Generator,Bert_Cross_Encoder
+from models import BiLSTM_BNE, Biosyn_Model,Graphsage_Model,Bert_Candidate_Generator,Bert_Cross_Encoder
 from criterion import marginal_loss
 from transformers import *
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -964,9 +964,11 @@ class BNE_Classifier():
         self.name_array,query_id_array,self.mention2id,self.egde_index = load_data(self.filename,self.use_text_preprocesser)
         self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'],test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
+        if self.embedding_type == 'bert':
+            self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
+        elif self.embedding_type == 'bne':
+            self.emb_model = BiLSTM_BNE()
 
-        self.bne_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
-        
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
@@ -975,7 +977,7 @@ class BNE_Classifier():
     def get_mention_array_bert_embedding(self,mention_array):
         
         # use dataset to help embed the mention_array
-        self.bne_model.eval()# Enter Eval Mode
+        self.emb_model.eval()# Enter Eval Mode
         
         mention_dataset = Mention_Dataset(mention_array,self.tokenizer)
         mentions_embedding = []
@@ -984,7 +986,7 @@ class BNE_Classifier():
             for i, (input_ids, attention_mask) in enumerate(data_loader):
                 input_ids = input_ids.cuda()
                 attention_mask = attention_mask.cuda()
-                cls_embedding = self.bne_model.bert_encoder(input_ids,attention_mask).last_hidden_state[:,0,:]# batch * hidden_size
+                cls_embedding = self.emb_model.bert_encoder(input_ids,attention_mask).last_hidden_state[:,0,:]# batch * hidden_size
                 mentions_embedding.append(cls_embedding)
             
             mentions_embedding = torch.cat(mentions_embedding, dim=0)# len(mentions) * hidden_size
@@ -1037,19 +1039,20 @@ class BNE_Classifier():
         print("Shape of Mentions Embeddings - ", mentions_embedding.shape)
         return mentions_embedding
 
-
-
     # this function will use too much memory, so we calculate the score for single batch
     def get_score_matrix(self,query_array):
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(query_array).toarray()).cuda()
         name_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()
         sparse_score_matrix = torch.matmul(query_sparse_embedding,name_sparse_embedding.transpose(0,1))
+
         if self.embedding_type == 'bert':
             query_bert_embedding = self.get_mention_array_bert_embedding(query_array).cuda()
             name_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
+            
         elif self.embedding_type == 'bne':
             query_bert_embedding = self.get_bne_embedings(query_array).cuda()
             name_bert_embedding = self.get_bne_embedings(self.name_array).cuda()
+        
         bert_score_matrix = torch.matmul(query_bert_embedding,name_bert_embedding.transpose(0,1))
 
         return sparse_score_matrix, bert_score_matrix
@@ -1058,15 +1061,15 @@ class BNE_Classifier():
         print('in train')
         criterion = marginal_loss
         optimizer = torch.optim.Adam([
-            {'params': self.bne_model.bert_encoder.parameters()},
-            {'params': self.bne_model.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
+            {'params': self.emb_model.bert_encoder.parameters()},
+            {'params': self.emb_model.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
             ], 
             lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
         )
         
         for epoch in range(1, self.args['epoch_num'] + 1):
             loss_sum = 0
-            self.bne_model.train()
+            self.emb_model.train()
 
             names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()
             if self.embedding_type == 'bert':
@@ -1075,11 +1078,12 @@ class BNE_Classifier():
                 names_dense_embedding = self.get_bne_embedings(self.name_array).cuda()
 
             biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
-            sparse_encoder=self.sparse_encoder,bert_encoder = self.bne_model.bert_encoder,
+            sparse_encoder=self.sparse_encoder,bert_encoder = self.emb_model.bert_encoder,
             names_sparse_embedding=names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
             data_loader = DataLoader(dataset=biosyn_dataset,batch_size=self.args['batch_size'])
+
             for iteration, batch_data in tqdm(enumerate(data_loader),total=len(data_loader)):
 
                 optimizer.zero_grad()
@@ -1099,8 +1103,11 @@ class BNE_Classifier():
                 #print(candidates_names_attention_mask.shape)
                 #print(candidates_sparse_score.shape)
 
-                score = self.bne_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
-                
+                if self.embedding_type == 'bert':
+                    score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
+                elif self.embedding_type == 'bne':
+                    score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
+  
                 print(score)
 
                 loss = criterion(score,labels)
@@ -1124,7 +1131,7 @@ class BNE_Classifier():
 
     #@torch.no_grad()
     def eval(self,query_array,load_model=False,epoch = 0):
-        self.bne_model.eval()# for nn.module
+        self.emb_model.eval()# for nn.module
         accu_1 = torch.FloatTensor([0]).cuda()
         accu_k = torch.FloatTensor([0]).cuda()
 
@@ -1135,7 +1142,7 @@ class BNE_Classifier():
             for array in eval_dataloader:
                 sparse_score_matrix, bert_score_matrix = self.get_score_matrix(array)
                 if self.args['score_mode'] == 'hybrid':
-                    score_matrix = self.bne_model.sparse_weight * sparse_score_matrix + bert_score_matrix
+                    score_matrix = self.emb_model.sparse_weight * sparse_score_matrix + bert_score_matrix
               
                 elif self.args['score_mode'] == 'sparse':
                     score_matrix = sparse_score_matrix
@@ -1149,12 +1156,12 @@ class BNE_Classifier():
         return accu_1,accu_k
         
     def save_model(self,checkpoint_dir):
-        self.bne_model.bert_encoder.save_pretrained(checkpoint_dir)
-        torch.save(self.bne_model.sparse_weight,os.path.join(checkpoint_dir,'sparse_weight.pth'))
+        self.emb_model.bert_encoder.save_pretrained(checkpoint_dir)
+        torch.save(self.emb_model.sparse_weight,os.path.join(checkpoint_dir,'sparse_weight.pth'))
 
     def load_model(self,model_path):
         self.args['logger'].info('model loaded at %s'%model_path)
         state_dict = torch.load(os.path.join(model_path, "pytorch_model.bin"))
-        self.bne_model.bert_encoder.load_state_dict(state_dict,False)
-        self.bne_model.sparse_weight = torch.load(os.path.join(model_path,'sparse_weight.pth'))
+        self.emb_model.bert_encoder.load_state_dict(state_dict,False)
+        self.emb_model.sparse_weight = torch.load(os.path.join(model_path,'sparse_weight.pth'))
         

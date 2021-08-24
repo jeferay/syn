@@ -31,6 +31,9 @@ class BNE:
         session.run(tf.global_variables_initializer())
         variables = [_ for _ in tf.global_variables()
                      if _ not in self.encoder.ignored_vars]
+
+        print(variables)
+        
         self.saver = tf.train.Saver(variables, max_to_keep=1)
 
         self.saver.restore(session, arg_model + '/best_model')
@@ -136,6 +139,7 @@ if __name__ == '__main__':
                 params = json.load(f)
                 params['w2id'] = w2id
 
+            print(params['w2id'])
             print("Finished loading model/evaluation parameters from the json file here - ", os.path.join(arg_model,'params.json'))
 
             # Declare and load pretrained model.
