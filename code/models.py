@@ -219,11 +219,10 @@ class Bert_Cross_Encoder(nn.Module):
 
 class BiLSTM_BNE(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes) -> None:
-        super(BiLSTM_BNE).__init__()
-        f = open(os.path.join(".../","bne_resources/weight_dict.pickle"),"rb")
+        super(BiLSTM_BNE,self).__init__()
+        f = open(os.path.join("../","bne_resources/weight_dict.pkl"),"rb")
         weight_dict = pickle.load(f)
         f.close()
-        
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers

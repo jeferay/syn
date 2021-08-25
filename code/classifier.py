@@ -969,7 +969,7 @@ class BNE_Classifier():
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE()
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=200, num_layers=2, num_classes=2)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
@@ -1062,13 +1062,18 @@ class BNE_Classifier():
     def train(self):
         print('in train')
         criterion = marginal_loss
-        optimizer = torch.optim.Adam([
-            {'params': self.emb_model.bert_encoder.parameters()},
-            {'params': self.emb_model.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
-            ], 
-            lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
-        )
-        
+        if self.embedding_type == 'bert':
+            optimizer = torch.optim.Adam([
+                {'params': self.emb_model.bert_encoder.parameters()},
+                {'params': self.emb_model.sparse_weight, 'lr': 0.001, 'weight_decay': 0}
+                ], 
+                lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
+            )
+        elif self.embedding_type == 'bne':
+            optimizer = torch.optim.Adam([
+                {'params': self.emb_model.parameters()}], 
+                lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
+            )
         for epoch in range(1, self.args['epoch_num'] + 1):
             loss_sum = 0
             self.emb_model.train()
