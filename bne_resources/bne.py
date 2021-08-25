@@ -19,12 +19,14 @@ import math
 import json
 from encoder import *
 import os
+import pickle
+import sys
 
 class BNE:
     def __init__(self, session, pretrained_we, params):
         self.session = session
         self.encoder = NameEncoder(params, session)
-        print(self.encoder)
+
         # Load pretrained model parameters.
         print('Load pretrained model from {}'.format(arg_model + '/best_model'))
 
@@ -32,8 +34,24 @@ class BNE:
         variables = [_ for _ in tf.global_variables()
                      if _ not in self.encoder.ignored_vars]
 
-        print(variables)
-        
+        values  = self.session.run(variables)
+        names = variables
+        weight_dict = {}
+
+        for idx, item in enumerate(names):
+            str_item = str(item)
+            weight_dict[str_item] = values[idx]
+
+        for item in weight_dict:
+            shape_str = [x for x in item.split(' ') if 'shape' in str(x)]
+            print(shape_str, weight_dict[item].shape)
+
+        file_name = "weight_dict.pkl"
+
+        open_file = open(file_name, "wb")
+        pickle.dump(weight_dict, open_file)
+        open_file.close()
+
         self.saver = tf.train.Saver(variables, max_to_keep=1)
 
         self.saver.restore(session, arg_model + '/best_model')
@@ -139,7 +157,6 @@ if __name__ == '__main__':
                 params = json.load(f)
                 params['w2id'] = w2id
 
-            print(params['w2id'])
             print("Finished loading model/evaluation parameters from the json file here - ", os.path.join(arg_model,'params.json'))
 
             # Declare and load pretrained model.

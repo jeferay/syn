@@ -964,6 +964,8 @@ class BNE_Classifier():
         self.name_array,query_id_array,self.mention2id,self.egde_index = load_data(self.filename,self.use_text_preprocesser)
         self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'],test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
+        self.embedding_type = args['emb_type']
+        
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':

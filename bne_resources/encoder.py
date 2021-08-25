@@ -278,6 +278,7 @@ class NameEncoder(BaseModel):
                                     self.drp_keep,
                                     self.initializer,
                                     reuse=tf.AUTO_REUSE)
+
         h, h_raw = self.hw_pooling(hw,
                                    self.xw_mask,
                                    hw_size,

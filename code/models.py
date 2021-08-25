@@ -1,3 +1,4 @@
+import pickle
 from typing import NoReturn
 from numpy.core.numeric import indices
 import torch
@@ -219,6 +220,10 @@ class Bert_Cross_Encoder(nn.Module):
 class BiLSTM_BNE(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes) -> None:
         super(BiLSTM_BNE).__init__()
+        f = open(os.path.join(".../","bne_resources/weight_dict.pickle"),"rb")
+        weight_dict = pickle.load(f)
+        f.close()
+        
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
