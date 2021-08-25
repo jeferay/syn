@@ -87,9 +87,8 @@ class Biosyn_Classifier():
             names_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform(self.name_array).toarray()).cuda()
             names_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
 
-
-            biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
-            sparse_encoder=self.sparse_encoder,bert_encoder=self.biosyn_model.bert_encoder,
+            biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id, self.args['top_k'],
+            sparse_encoder = self.sparse_encoder,bert_encoder = self.biosyn_model.bert_encoder,
             names_sparse_embedding=names_sparse_embedding,names_bert_embedding=names_bert_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
 
@@ -1084,14 +1083,24 @@ class BNE_Classifier():
             elif self.embedding_type == 'bne':
                 names_dense_embedding = self.get_bne_embedings(self.name_array).cuda()
 
+            print("Shape of names_sparse_embedding is ", names_sparse_embedding.shape)
+            print("names_dense_embedding shape ", names_dense_embedding.shape)
+
+            print("length of name_array", len(self.name_array))
+            print("length of queries_train", len(self.queries_train))
+            print("Length of mentions to ID is", len(self.mention2id))
+
             biosyn_dataset = Biosyn_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
-            sparse_encoder=self.sparse_encoder,bert_encoder = self.emb_model.bert_encoder,
-            names_sparse_embedding=names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
+            sparse_encoder = self.sparse_encoder,bert_encoder = self.emb_model.bert_encoder,
+            names_sparse_embedding = names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
             bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
+            
 
             data_loader = DataLoader(dataset=biosyn_dataset,batch_size=self.args['batch_size'])
-
-            for iteration, batch_data in tqdm(enumerate(data_loader),total=len(data_loader)):
+            print("Length of the dataset is ", len(data_loader.dataset))
+            print("Batch size is ", self.args['batch_size'])
+            
+            for iteration, batch_data in tqdm(enumerate(data_loader), total=len(data_loader)):
 
                 optimizer.zero_grad()
 
@@ -1115,8 +1124,6 @@ class BNE_Classifier():
                 elif self.embedding_type == 'bne':
                     score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
   
-                print(score)
-
                 loss = criterion(score,labels)
                 loss_sum+=loss.item()
                 loss.backward()

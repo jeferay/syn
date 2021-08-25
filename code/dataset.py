@@ -315,6 +315,7 @@ class Mention_Dataset(Dataset):
 
 class Biosyn_Dataset(Dataset):
     def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder,bert_encoder,names_sparse_embedding, names_bert_embedding,bert_ratio,tokenizer):
+
         """
         args:
             name_arrayy: all the name of nodes in a sorted order; str of list
@@ -357,7 +358,7 @@ class Biosyn_Dataset(Dataset):
                 j+=1
             candidates_indices[i] = bert_indices[j]
             j+=1
-        #print(candidates_indices)
+
         assert(len(torch.unique(candidates_indices))==len(candidates_indices))# assert no overlap
         return candidates_indices.to('cpu'),sparse_score.to('cpu')
     

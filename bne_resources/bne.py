@@ -41,11 +41,14 @@ class BNE:
         for idx, item in enumerate(names):
             str_item = str(item)
             weight_dict[str_item] = values[idx]
-
+       
+        """
         for item in weight_dict:
             shape_str = [x for x in item.split(' ') if 'shape' in str(x)]
             print(shape_str, weight_dict[item].shape)
 
+        """
+  
         file_name = "weight_dict.pkl"
 
         open_file = open(file_name, "wb")
