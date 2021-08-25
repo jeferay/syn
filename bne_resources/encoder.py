@@ -174,7 +174,7 @@ class BaseModel:
             x_rep = tf.nn.embedding_lookup(ce, x_flat)
 
             with tf.variable_scope('c_encoder'):
-                xc_rep, xc_size, _ = rnn_encoder( self.params['c_rnn_type'], x_rep, x_mask_flat, self.params['c_h_dim'], self.params['c_rnn_layers'], initializer, self.params['c_pooling'])
+                xc_rep, xc_size, _ = rnn_encoder(self.params['c_rnn_type'], x_rep, x_mask_flat, self.params['c_h_dim'], self.params['c_rnn_layers'], initializer, self.params['c_pooling'])
                 xc_rep = tf.reshape(xc_rep, [dims_2, n_w, xc_size])
 
             xw_fat = tf.reshape(xw, (dims_2, n_w))

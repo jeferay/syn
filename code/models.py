@@ -41,6 +41,9 @@ class Biosyn_Model(nn.Module):
         query_embedding = torch.unsqueeze(query_embedding,dim=1)#batch * 1 *hidden_size
         bert_score = torch.bmm(query_embedding, candidiate_names_graph_embedding.transpose(dim0=1,dim1=2)).squeeze()# batch * top_k
 
+        print(query_embedding.shape)
+        print(candidiate_names_graph_embedding.shape)
+
         score = bert_score + candidates_sparse_score * self.sparse_weight
         return score
 
@@ -86,8 +89,8 @@ class Graphsage_Model(torch.nn.Module):
         names_graph_embedding = torch.sigmoid(F.dropout(names_graph_embedding,0.3))
         names_graph_embedding = self.sage2(names_graph_embedding,edge_index)# shape of (N, output_size)
 
-        
         score = []
+
         for k in range(top_k):
             k_indices = candidates_indices[:,k]# the ith index for every query, tensor of shape(batch,)
             k_candidate_graph_embedding = names_graph_embedding[k_indices]# tensor of shape(batch,hidden)# modify
@@ -220,15 +223,21 @@ class Bert_Cross_Encoder(nn.Module):
 class BiLSTM_BNE(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes) -> None:
         super(BiLSTM_BNE,self).__init__()
-        f = open(os.path.join("../","bne_resources/weight_dict.pkl"),"rb")
-        weight_dict = pickle.load(f)
-        f.close()
+
+        weight_dict = self._load_pkl_weights(os.path.join("../","bne_resources/weight_dict.pkl"))
+ 
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.num_classes = num_classes
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
         self.fc = nn.Linear(hidden_size * 2, num_classes)
+
+    def _load_pkl_weights(self, path_pkl):
+        f  = open(os.path.join(path_pkl),"rb")
+        weight_dict = pickle.load(f)
+        f.close()
+        return weight_dict
 
     def forward(self, x):
         h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size) # initial hidden state
@@ -237,5 +246,10 @@ class BiLSTM_BNE(nn.Module):
         out = self.fc(out[:,-1,:]) # taking the output only at the last time point
         pass
 
-        
-        
+            
+        """
+            for key in weight_dict.keys():
+                print(key.replace("tf.Variable","").replace("dtype=float32_ref>",""), weight_dict[key].shape)
+
+        """
+    
