@@ -15,7 +15,7 @@ from transformers.models import bert
 import sys 
 sys.path.append("/home/megh/projects/entity-norm/syn/")
 from bne_resources.run_bne_for_pt import * 
-from dataset import Biosyn_Dataset, Graph_Dataset, Mention_Dataset, BNE_Dataset load_data, data_split
+from dataset import Biosyn_Dataset, Graph_Dataset, Mention_Dataset, BNE_Dataset, load_data, data_split
 from models import BiLSTM_BNE, Biosyn_Model,Graphsage_Model,Bert_Candidate_Generator,Bert_Cross_Encoder
 from criterion import marginal_loss
 from transformers import *
@@ -1097,8 +1097,8 @@ class BNE_Classifier():
 
             if self.embedding_type == 'bne':
                 ds = BNE_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
-                sparse_encoder = self.sparse_encoder,bert_encoder = bert_enc,
-                names_sparse_embedding = names_sparse_embedding,names_bert_embedding = names_dense_embedding, 
+                sparse_encoder = self.sparse_encoder,encoder = bert_enc,
+                names_sparse_embedding = names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
                 bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
             
 

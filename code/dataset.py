@@ -402,7 +402,7 @@ class Biosyn_Dataset(Dataset):
         return len(self.query_array)
 
 class BNE_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder,bert_encoder,names_sparse_embedding, names_bert_embedding,bert_ratio,tokenizer):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio,tokenizer):
 
         """
         args:
@@ -414,37 +414,37 @@ class BNE_Dataset(Dataset):
             bert_score_matrix: tensor of shape(num_query, num_name)
 
         """
-        super(Biosyn_Dataset,self).__init__()
+        super(BNE_Dataset,self).__init__()
         self.name_array = name_array
         self.query_array = query_array
         self.mention2id = mention2id
         self.top_k = top_k
 
         self.sparse_encoder = sparse_encoder
-        self.bert_encoder = bert_encoder# still on the device
+        self.encoder = encoder # still on the device
         self.names_sparse_embedding = names_sparse_embedding.cuda()
-        self.names_bert_embedding = names_bert_embedding.cuda()# tensor of shape(num_query, num_names)
+        self.names_dense_embedding = names_dense_embedding.cuda()# tensor of shape(num_query, num_names)
         
-        self.bert_ratio = bert_ratio
-        self.n_bert = int(self.top_k * self.bert_ratio)
-        self.n_sparse = self.top_k - self.n_bert
+        self.dense_ratio = bert_ratio
+        self.n_dense = int(self.top_k * self.dense_ratio)
+        self.n_sparse = self.top_k - self.n_dense
         self.tokenizer = tokenizer
 
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
-    def get_candidates_indices(self,query_sparse_embedding,query_bert_embedding):
+    def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
 
         candidates_indices = torch.LongTensor(size=(self.top_k,)).cuda()
         sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()
         _,sparse_indices = torch.sort(sparse_score,descending=True)
-        bert_score = (torch.matmul(torch.reshape(query_bert_embedding,shape=(1,-1)),self.names_bert_embedding.transpose(0,1))).squeeze()
-        _,bert_indices = torch.sort(bert_score,descending=True)
+        dense_score = (torch.matmul(torch.reshape(query_dense_embedding,shape=(1,-1)),self.names_dense_embedding.transpose(0,1))).squeeze()
+        _,dense_indices = torch.sort(dense_score,descending=True)
 
         candidates_indices[:self.n_sparse] = sparse_indices[:self.n_sparse]
         j = 0
         for i in range(self.n_sparse,self.top_k):
-            while bert_indices[j] in candidates_indices[:self.n_sparse]:
+            while dense_indices[j] in candidates_indices[:self.n_sparse]:
                 j+=1
-            candidates_indices[i] = bert_indices[j]
+            candidates_indices[i] = dense_indices[j]
             j+=1
 
         assert(len(torch.unique(candidates_indices))==len(candidates_indices))# assert no overlap
@@ -461,12 +461,12 @@ class BNE_Dataset(Dataset):
         query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
 
 
-        query_bert_embedding = self.bert_encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device
+        query_dense_embedding = self.encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device
 
 
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
  
-        candidates_indices,sparse_score = self.get_candidates_indices(query_sparse_embedding,query_bert_embedding)
+        candidates_indices,sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
         candidates_sparse_score = sparse_score[candidates_indices]
         candidates_names = self.name_array[candidates_indices]
         
