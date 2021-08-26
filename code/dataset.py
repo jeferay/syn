@@ -1,5 +1,7 @@
 
 import json
+
+from pandas.tseries.offsets import QuarterOffset
 from transformers.models import bert
 import wget
 import os
@@ -15,6 +17,8 @@ from scipy.sparse.csgraph import connected_components
 from scipy import sparse
 from transformers import BertTokenizer
 import pandas as pd
+from dask import dataframe as dd
+import time 
 
 class TextPreprocess():
     """
@@ -430,11 +434,28 @@ class BNE_Dataset(Dataset):
         self.n_dense = int(self.top_k * self.dense_ratio)
         self.n_sparse = self.top_k - self.n_dense
         self.tokenizer = tokenizer
-        self.input_embedding = pd.read_csv(input_embedding_file, sep=' ')
-        print(self.input_embedding)
+        start = time.time()
         f = open(input_embedding_file,"r")
-        self.input_embedding = 
-
+        self.input_embedding = [line.replace("\n","") for line in f]
+        self.name_list, self.val_list = self.separate_name_and_vector(self.input_embedding[1:])
+        f.close()
+        end = time.time()
+        print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
+        """
+        chunk = pd.read_csv(input_embedding_file, chunksize=1000000, header = 0, skiprows = 0, error_bad_lines=False)
+        self.input_embedding = pd.concat(chunk)
+        print(self.input_embedding[0])
+        """
+   
+    def separate_name_and_vector(self, ip_embedding):
+        bne_name_list = []
+        embedding_vals = []
+        for line in ip_embedding:
+            line_split = str(line).split(" ")
+            bne_name_list.append(line_split[:1][0])
+            temp_arr = np.array(line_split[1:],dtype=np.float32)
+            embedding_vals.append(temp_arr)
+        return bne_name_list, embedding_vals
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
 
@@ -466,15 +487,25 @@ class BNE_Dataset(Dataset):
 
         #query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
 
-        query_dense_embedding = self.encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0))# still on device
+        # this procedure of calculating average of the constituent of the word embeddings is used to save time and space
+        query_individual_words = query.split(" ")
+        query_dense_embedding = 0
 
+        for idx, word in enumerate(query_individual_words):
+            word_index = self.name_list.index(str(word)
+            )
+            query_dense_embedding+= self.val_list[word_index]
+        query_dense_embedding = query_dense_embedding/(idx+1)
+        query_dense_embedding = torch.tensor(query_dense_embedding).cuda()
 
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
- 
-        candidates_indices,sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
+
+        candidates_indices, sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
         candidates_sparse_score = sparse_score[candidates_indices]
         candidates_names = self.name_array[candidates_indices]
         
+        print(candidates_names,query)
+
         candidates_names_ids, candidates_names_attention_mask=[],[]
         for name in candidates_names:
             name_tokens = self.tokenizer(name,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
@@ -489,7 +520,7 @@ class BNE_Dataset(Dataset):
 
         assert(labels.shape==torch.Size([self.top_k]))
 
-        return query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels
+        return query_dense_embedding,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels
 
     def __len__(self):
         return len(self.query_array)

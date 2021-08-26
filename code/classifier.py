@@ -1110,11 +1110,12 @@ class BNE_Classifier():
             for iteration, batch_data in tqdm(enumerate(data_loader), total=len(data_loader)):
 
                 optimizer.zero_grad()
+                if self.embedding_type == 'bne':
+                    query_dense_embedding,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels = batch_data
+                if not self.embedding_type == 'bne':
+                    query_ids = query_ids.cuda()
+                    query_attention_mask = query_attention_mask.cuda()
 
-                query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels = batch_data
-    
-                query_ids = query_ids.cuda()
-                query_attention_mask = query_attention_mask.cuda()
                 candidates_names_ids = candidates_names_ids.cuda()
                 candidates_names_attention_mask = candidates_names_attention_mask.cuda()
                 candidates_sparse_score = candidates_sparse_score.cuda()
@@ -1125,7 +1126,7 @@ class BNE_Classifier():
                 if self.embedding_type == 'bert':
                     score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
                 elif self.embedding_type == 'bne':
-                    score = self.emb_model(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
+                    score = self.emb_model(query_dense_embedding,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
   
                 loss = criterion(score,labels)
                 loss_sum+=loss.item()
