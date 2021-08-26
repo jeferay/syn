@@ -130,6 +130,7 @@ if __name__ == '__main__':
     ws = (ws & pretrained_ws) - set(RESERVE_TKS)
 
     w2id = {PAD: 0}
+    
     for w in ws:
         w2id[w] = len(w2id)
     for w in RESERVE_TKS:

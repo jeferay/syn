@@ -961,14 +961,14 @@ class BNE_Classifier():
         self.filename = self.args['filename']
         self.use_text_preprocesser = self.args['use_text_preprocesser']
         self.name_array,query_id_array,self.mention2id,self.egde_index = load_data(self.filename,self.use_text_preprocesser)
-        self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'],test_size=0.33)
+        self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'], test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
         self.embedding_type = args['emb_type']
         
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=200, num_layers=2, num_classes=2)
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=200, num_layers=1)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
@@ -1099,7 +1099,8 @@ class BNE_Classifier():
                 ds = BNE_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
                 sparse_encoder = self.sparse_encoder,encoder = bert_enc,
                 names_sparse_embedding = names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
-                bert_ratio=self.args['bert_ratio'],tokenizer=self.tokenizer)
+                bert_ratio=self.args['bert_ratio'],
+                tokenizer= self.tokenizer)
             
 
             data_loader = DataLoader(dataset=ds,batch_size=self.args['batch_size'])
@@ -1119,11 +1120,7 @@ class BNE_Classifier():
                 candidates_sparse_score = candidates_sparse_score.cuda()
                 labels = labels.cuda()
                 
-                #print(query_ids.shape)
-                #print(query_attention_mask)
-                #print(candidates_names_ids.shape)
-                #print(candidates_names_attention_mask.shape)
-                #print(candidates_sparse_score.shape)
+                print(labels)
 
                 if self.embedding_type == 'bert':
                     score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)

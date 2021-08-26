@@ -221,7 +221,7 @@ class Bert_Cross_Encoder(nn.Module):
 
 
 class BiLSTM_BNE(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_classes) -> None:
+    def __init__(self, input_size, hidden_size, num_layers) -> None:
         super(BiLSTM_BNE,self).__init__()
 
         weight_dict = self._load_pkl_weights(os.path.join("../","bne_resources/weight_dict.pkl"))
@@ -229,9 +229,10 @@ class BiLSTM_BNE(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.num_classes = num_classes
+
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
+
+
 
     def _load_pkl_weights(self, path_pkl):
         f  = open(os.path.join(path_pkl),"rb")
@@ -243,8 +244,7 @@ class BiLSTM_BNE(nn.Module):
         h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size) # initial hidden state
         c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size)
         out, y = self.lstm(x, (h0, c0))
-        out = self.fc(out[:,-1,:]) # taking the output only at the last time point
-        pass
+        return out
 
             
         """

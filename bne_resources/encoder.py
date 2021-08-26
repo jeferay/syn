@@ -185,10 +185,11 @@ class BaseModel:
 
     def encode(self, x, x_mask, xw, xw_mask,
                drp_keep, initializer, reuse):
+
         with tf.variable_scope('encoder', reuse=reuse):
             n_ce = max(self.params['c2id'].values()) + 1
             ce, _ = create_mixed_trainable_emb(self.params['ce_dim'], n_ce - len(RESERVE_TKS), len(RESERVE_TKS) - 1, initializer, True, 'ce')
-
+            
             n_we = max(self.params['w2id'].values()) + 1
             assert n_we == len(self.params['w2id'])
             we, we_core = create_mixed_trainable_emb(

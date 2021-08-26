@@ -14,6 +14,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy import sparse
 from transformers import BertTokenizer
+import pandas as pd
 
 class TextPreprocess():
     """
@@ -402,7 +403,7 @@ class Biosyn_Dataset(Dataset):
         return len(self.query_array)
 
 class BNE_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio,tokenizer):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, input_embedding_file = os.path.join("../bne_resources/embeddings/BioEmb/Emb_SGsc.txt")):
 
         """
         args:
@@ -429,6 +430,10 @@ class BNE_Dataset(Dataset):
         self.n_dense = int(self.top_k * self.dense_ratio)
         self.n_sparse = self.top_k - self.n_dense
         self.tokenizer = tokenizer
+        self.input_embedding = pd.read_csv(input_embedding_file, sep=' ')
+        print(self.input_embedding)
+        f = open(input_embedding_file,"r")
+        self.input_embedding = 
 
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
@@ -456,12 +461,12 @@ class BNE_Dataset(Dataset):
             ids,masks and sparse_scores of candidates indices(for later predictioon)
         """
         query = self.query_array[index]
-        query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
+        #query_tokens = self.tokenizer(query,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
+        #print(query_tokens)
 
-        query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
+        #query_ids,query_attention_mask = torch.squeeze(query_tokens['input_ids']).cuda(),torch.squeeze(query_tokens['attention_mask']).cuda()
 
-
-        query_dense_embedding = self.encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0)).last_hidden_state[:,0,:]# still on device
+        query_dense_embedding = self.encoder(query_ids.unsqueeze(0),query_attention_mask.unsqueeze(0))# still on device
 
 
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
