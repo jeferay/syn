@@ -405,7 +405,7 @@ class Biosyn_Dataset(Dataset):
         return len(self.query_array)
 
 class BNE_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, bne_name_list, embedding_vals):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, bne_embedding_dict):
 
         """
         args:
@@ -433,8 +433,7 @@ class BNE_Dataset(Dataset):
         self.n_sparse = self.top_k - self.n_dense
         self.tokenizer = tokenizer
 
-        self.name_list = bne_name_list
-        self.val_list = embedding_vals
+        self.bne_embedding_dict = bne_embedding_dict
         
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
@@ -473,17 +472,12 @@ class BNE_Dataset(Dataset):
         for idx, word in enumerate(query_individual_words):
             if use_average:
                 try:
-                    word_index = self.name_list.index(str(word))
-                    query_dense_embedding+= self.val_list[word_index]
+                    query_dense_embedding+= self.bne_embedding_dict[word]
                 except:
                     query_dense_embedding+= np.random.rand(200,)
-            elif not use_average:
-                query_dense_embedding.append(torch.tensor(self.val_list[word_index]))
 
         if use_average:
             query_dense_embedding = query_dense_embedding/(idx+1)
-        elif not use_average:
-            query_dense_embedding = torch.cat(query_dense_embedding, dim=1)
 
         query_dense_embedding = torch.tensor(query_dense_embedding).cuda().double()
 
@@ -501,9 +495,7 @@ class BNE_Dataset(Dataset):
             candidate_dense_embedding = 0
             for idx, word in enumerate(c_name_individual):
                 try:
-                    word_index = self.name_list.index(str(word)
-                    )
-                    candidate_dense_embedding+= self.val_list[word_index]
+                    candidate_dense_embedding+= self.bne_embedding_dict[str(word)]
                 except:
                     candidate_dense_embedding+=np.random.rand(200,)
             candidate_dense_embedding = candidate_dense_embedding/(idx+1)

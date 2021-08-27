@@ -969,7 +969,7 @@ class BNE_Classifier():
         start = time.time()
         f = open(input_embedding_file,"r")
         self.input_embedding = [line.replace("\n","") for line in f]
-        self.bne_name_list, self.bne_val_list = self.separate_name_and_vector(self.input_embedding[1:])
+        self.bne_embedding_dict = self.separate_name_and_vector(self.input_embedding[1:])
         f.close()
         end = time.time()
         print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
@@ -985,12 +985,14 @@ class BNE_Classifier():
     def separate_name_and_vector(self, ip_embedding):
         bne_name_list = []
         embedding_vals = []
+        bne_embedding_dict= {}
         for line in ip_embedding:
             line_split = str(line).split(" ")
             bne_name_list.append(line_split[:1][0])
             temp_arr = np.array(line_split[1:],dtype=np.float32)
             embedding_vals.append(temp_arr)
-        return bne_name_list, embedding_vals
+            bne_embedding_dict[line_split[:1][0]] = temp_arr
+        return bne_embedding_dict
 
     # get the embeddings of mention_array(name_array or query_array)
     def get_mention_array_bert_embedding(self,mention_array):
@@ -1062,20 +1064,15 @@ class BNE_Classifier():
         mention_embedding_list = []
 
         for mention in mention_array:
-            
             mention_words = str(mention).split(" ")
             mention_embedding = 0
             for idx, word in enumerate(mention_words):
                 word = word.lower().replace(",","")
                 try:
-                    mention_index = self.bne_name_list.index(str(word))
-                    mention_embedding+=self.bne_val_list[mention_index]
+                    mention_embedding+=self.bne_embedding_dict[str(word)]
                 except:
-                    #print("%s word not found. using random embeddings"%(str(word)))
-                    self.bne_name_list.append(word)
-                    self.bne_val_list.append(np.random.rand(200,))
-                    new_index = self.bne_name_list.index(word)
-                    mention_embedding+=self.bne_val_list[new_index]
+                    self.bne_embedding_dict[str(word)] = np.random.rand(200,)
+                    mention_embedding +=self.bne_embedding_dict[str(word)]
                     num_word_not_found+=1
             mention_embedding = mention_embedding/(idx + 1)
             mention_embedding = torch.tensor(mention_embedding).unsqueeze(0)
@@ -1148,7 +1145,7 @@ class BNE_Classifier():
                 sparse_encoder = self.sparse_encoder,encoder = bert_enc,
                 names_sparse_embedding = names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
                 bert_ratio=self.args['bert_ratio'],
-                tokenizer= self.tokenizer, bne_name_list = self.bne_name_list, embedding_vals = self.bne_val_list)
+                tokenizer= self.tokenizer, bne_embedding_dict = self.bne_embedding_dict)
             
 
             data_loader = DataLoader(dataset=ds,batch_size=self.args['batch_size'])
