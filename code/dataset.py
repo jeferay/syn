@@ -471,14 +471,12 @@ class BNE_Dataset(Dataset):
         if not use_average:
             query_dense_embedding = []
         for idx, word in enumerate(query_individual_words):
-         
             if use_average:
                 try:
                     word_index = self.name_list.index(str(word))
                     query_dense_embedding+= self.val_list[word_index]
                 except:
                     query_dense_embedding+= np.random.rand(200,)
-                    print("word embedding not found .. using random initialization")
             elif not use_average:
                 query_dense_embedding.append(torch.tensor(self.val_list[word_index]))
 

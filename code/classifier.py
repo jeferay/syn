@@ -990,8 +990,8 @@ class BNE_Classifier():
             bne_name_list.append(line_split[:1][0])
             temp_arr = np.array(line_split[1:],dtype=np.float32)
             embedding_vals.append(temp_arr)
-            break
         return bne_name_list, embedding_vals
+
     # get the embeddings of mention_array(name_array or query_array)
     def get_mention_array_bert_embedding(self,mention_array):
         
@@ -1058,20 +1058,33 @@ class BNE_Classifier():
         return mentions_embedding
     
     def get_bne_embeddings(self, mention_array):
-        print(len(mention_array))
+        num_word_not_found = 0
+        mention_embedding_list = []
+
         for mention in mention_array:
-            mention_words = str(mention.split(" "))
+            
+            mention_words = str(mention).split(" ")
             mention_embedding = 0
-            for word in mention_words:
-                mention_index = self.bne_name_list.index(str(word))
-                
-
-        mention_dataset = Mention_Dataset(mention_array,self.tokenizer)       
-        mentions_embedding = []
-        mention_dataloader = DataLoader(mention_dataset, batch_size = 1024)
-        print("Length of Mentions Dataloder is - ", len(mention_dataloader.dataset))
-        sys.exit()
-
+            for idx, word in enumerate(mention_words):
+                word = word.lower().replace(",","")
+                try:
+                    mention_index = self.bne_name_list.index(str(word))
+                    mention_embedding+=self.bne_val_list[mention_index]
+                except:
+                    #print("%s word not found. using random embeddings"%(str(word)))
+                    self.bne_name_list.append(word)
+                    self.bne_val_list.append(np.random.rand(200,))
+                    new_index = self.bne_name_list.index(word)
+                    mention_embedding+=self.bne_val_list[new_index]
+                    num_word_not_found+=1
+            mention_embedding = mention_embedding/(idx + 1)
+            mention_embedding = torch.tensor(mention_embedding).unsqueeze(0)
+            mention_embedding_list.append(mention_embedding)
+        
+        print("Number of words not found", num_word_not_found)
+        print("Length of embedding list is ", len(mention_embedding_list))
+        mention_embedding = torch.cat(mention_embedding_list, dim =0).double()
+        return mention_embedding
 
     # this function will use too much memory, so we calculate the score for single batch
     def get_score_matrix(self,query_array):
@@ -1084,15 +1097,15 @@ class BNE_Classifier():
             name_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
             
         elif self.embedding_type == 'bne':
-            query_bert_embedding = self.get_bne_embeddings(query_array).cuda()
-            name_bert_embedding = self.get_bne_embeddings(self.name_array).cuda()
+            query_dense_embedding = self.get_bne_embeddings(query_array).cuda()
+            name_dense_embedding = self.get_bne_embeddings(self.name_array).cuda()
         
-        bert_score_matrix = torch.matmul(query_bert_embedding,name_bert_embedding.transpose(0,1))
+        bert_score_matrix = torch.matmul(query_dense_embedding, name_dense_embedding.transpose(0,1))
 
         return sparse_score_matrix, bert_score_matrix
 
     def train(self):
-        print('in train')
+        print('In train function ..')
         criterion = marginal_loss
         if self.embedding_type == 'bert':
             optimizer = torch.optim.Adam([
@@ -1151,23 +1164,11 @@ class BNE_Classifier():
                     candidates_dense_input_embeddings = candidates_dense_input_embeddings.cuda()
 
                 
-                """
-                if not self.embedding_type == 'bne':
-                    query_ids = query_ids.cuda()
-                    query_attention_mask = query_attention_mask.cuda()
-                
-                """    
-      
-
-                #candidates_names_ids = candidates_names_ids.cuda()
-                #candidates_names_attention_mask = candidates_names_attention_mask.cuda()
                 candidates_sparse_score = candidates_sparse_score.cuda()
                 labels = labels.cuda()
 
-                if self.embedding_type == 'bert':
-                    score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
-                elif self.embedding_type == 'bne':
-                    score = self.emb_model(query_dense_input_embedding,candidates_dense_input_embeddings,candidates_sparse_score)
+                if self.embedding_type == 'bne':
+                    score = self.emb_model(query_dense_input_embedding.double(),candidates_dense_input_embeddings.double(),candidates_sparse_score)
   
                 loss = criterion(score,labels)
                 loss_sum+=loss.item()
