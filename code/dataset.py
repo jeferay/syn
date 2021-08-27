@@ -346,7 +346,7 @@ class Biosyn_Dataset(Dataset):
         self.tokenizer = tokenizer
 
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
-    def get_candidates_indices(self,query_sparse_embedding,query_bert_embedding):
+    def get_candidates_indices(self,query_sparse_embedding, query_bert_embedding):
 
         candidates_indices = torch.LongTensor(size=(self.top_k,)).cuda()
         sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()
@@ -405,7 +405,7 @@ class Biosyn_Dataset(Dataset):
         return len(self.query_array)
 
 class BNE_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, input_embedding_file = os.path.join("../bne_resources/embeddings/BioEmb/Emb_SGsc.txt")):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, bne_name_list, embedding_vals):
 
         """
         args:
@@ -426,29 +426,16 @@ class BNE_Dataset(Dataset):
         self.sparse_encoder = sparse_encoder
         self.encoder = encoder # still on the device
         self.names_sparse_embedding = names_sparse_embedding.cuda()
-        self.names_dense_embedding = names_dense_embedding.cuda()# tensor of shape(num_query, num_names)
+        self.names_dense_embedding = names_dense_embedding.cuda().double()# tensor of shape(num_query, num_names)
         
         self.dense_ratio = bert_ratio
         self.n_dense = int(self.top_k * self.dense_ratio)
         self.n_sparse = self.top_k - self.n_dense
         self.tokenizer = tokenizer
-        start = time.time()
-        f = open(input_embedding_file,"r")
-        self.input_embedding = [line.replace("\n","") for line in f]
-        self.name_list, self.val_list = self.separate_name_and_vector(self.input_embedding[1:])
-        f.close()
-        end = time.time()
-        print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
-   
-    def separate_name_and_vector(self, ip_embedding):
-        bne_name_list = []
-        embedding_vals = []
-        for line in ip_embedding:
-            line_split = str(line).split(" ")
-            bne_name_list.append(line_split[:1][0])
-            temp_arr = np.array(line_split[1:],dtype=np.float32)
-            embedding_vals.append(temp_arr)
-        return bne_name_list, embedding_vals
+
+        self.name_list = bne_name_list
+        self.val_list = embedding_vals
+        
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
 
@@ -479,17 +466,33 @@ class BNE_Dataset(Dataset):
         # this procedure of calculating average of the constituent of the word embeddings is used to save time and space
         query_individual_words = query.split(" ")
         query_dense_embedding = 0
-
+        
+        use_average = True # debug use_average later
+        if not use_average:
+            query_dense_embedding = []
         for idx, word in enumerate(query_individual_words):
-            word_index = self.name_list.index(str(word)
-            )
-            query_dense_embedding+= self.val_list[word_index]
-        query_dense_embedding = query_dense_embedding/(idx+1)
-        query_dense_embedding = torch.tensor(query_dense_embedding).cuda()
+         
+            if use_average:
+                try:
+                    word_index = self.name_list.index(str(word))
+                    query_dense_embedding+= self.val_list[word_index]
+                except:
+                    query_dense_embedding+= np.random.rand(200,)
+                    print("word embedding not found .. using random initialization")
+            elif not use_average:
+                query_dense_embedding.append(torch.tensor(self.val_list[word_index]))
+
+        if use_average:
+            query_dense_embedding = query_dense_embedding/(idx+1)
+        elif not use_average:
+            query_dense_embedding = torch.cat(query_dense_embedding, dim=1)
+
+        query_dense_embedding = torch.tensor(query_dense_embedding).cuda().double()
 
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
 
         candidates_indices, sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
+
         candidates_sparse_score = sparse_score[candidates_indices]
         candidates_names = self.name_array[candidates_indices]
         
@@ -506,28 +509,16 @@ class BNE_Dataset(Dataset):
                 except:
                     candidate_dense_embedding+=np.random.rand(200,)
             candidate_dense_embedding = candidate_dense_embedding/(idx+1)
-            candidate_dense_embedding = torch.tensor(candidate_dense_embedding).cuda()
+            candidate_dense_embedding = torch.tensor(candidate_dense_embedding).cuda().unsqueeze(0)
             candidate_dense_embedding_list.append(candidate_dense_embedding)
-        print(candidate_dense_embedding_list)
-
-
-
-
-        candidates_names_ids, candidates_names_attention_mask=[],[]
-        for name in candidates_names:
-            name_tokens = self.tokenizer(name,add_special_tokens=True, max_length = 24, padding='max_length',truncation=True,return_attention_mask = True, return_tensors='pt')
-            name_ids,name_attention_mask = torch.squeeze(name_tokens['input_ids']),torch.squeeze(name_tokens['attention_mask'])
-            candidates_names_ids.append(name_ids)
-            candidates_names_attention_mask.append(name_attention_mask)
         
-        candidates_names_ids = torch.stack(candidates_names_ids,dim=0)# tensor of shape(top_k, max_len)
-        candidates_names_attention_mask = torch.stack(candidates_names_attention_mask,dim=0)# tensor of shape(top_k, max_len)
+        candidate_dense_embedding = torch.cat(candidate_dense_embedding_list,dim=0)
 
         labels = torch.LongTensor([self.mention2id[query]==self.mention2id[name] for name in candidates_names])
 
         assert(labels.shape==torch.Size([self.top_k]))
 
-        return query_dense_embedding, candidate_dense_embedding_list
+        return query_dense_embedding, candidate_dense_embedding, candidates_sparse_score, labels
 
     def __len__(self):
         return len(self.query_array)

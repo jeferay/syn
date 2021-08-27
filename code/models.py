@@ -202,7 +202,6 @@ class Bert_Cross_Encoder(nn.Module):
             k_sparse_embedding = names_sparse_embedding[k_candidates_indices]
             k_embedding = torch.cat((k_bert_embedding,k_sparse_embedding),dim=1)# tensor of shape(batch, 768+sparse_feature_size)
 
-
             candidiate_names_embedding.append(k_embedding)
         candidiate_names_embedding = torch.stack(candidiate_names_embedding,dim = 1)# tensor of shape(batch, top_k, hidden_size)
 
@@ -221,7 +220,7 @@ class Bert_Cross_Encoder(nn.Module):
 
 
 class BiLSTM_BNE(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers) -> None:
+    def __init__(self, input_size, hidden_size, num_layers, initial_sparse_weight = 1. ) -> None:
         super(BiLSTM_BNE,self).__init__()
 
         weight_dict = self._load_pkl_weights(os.path.join("../","bne_resources/weight_dict.pkl"))
@@ -232,7 +231,9 @@ class BiLSTM_BNE(nn.Module):
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
 
+        self.sparse_weight = nn.Parameter(torch.empty(1).cuda(),requires_grad=True)
 
+        self.sparse_weight.data.fill_(initial_sparse_weight)
 
     def _load_pkl_weights(self, path_pkl):
         f  = open(os.path.join(path_pkl),"rb")
@@ -240,11 +241,31 @@ class BiLSTM_BNE(nn.Module):
         f.close()
         return weight_dict
 
-    def forward(self, x):
-        h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size) # initial hidden state
-        c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size)
-        out, y = self.lstm(x, (h0, c0))
-        return out
+    def forward(self, query_dense_embeddings, candidate_dense_embedding, candidate_sparse_score):    
+        # modify dim to fit into pytorch LSTM scheme
+        query_dense_embeddings = query_dense_embeddings.unsqueeze(1)
+
+        h0 = torch.zeros(self.num_layers * 2, query_dense_embeddings.size(0), self.hidden_size).cuda().double() # initial hidden state
+        c0 = torch.zeros(self.num_layers * 2, query_dense_embeddings.size(0), self.hidden_size).cuda().double() # initial cell state
+
+        # get output embeddings through LSTM for both query and top k candidates 
+        query_output_embedding , y_query = self.lstm(query_dense_embeddings, (h0, c0))
+        # We need to loop since there are k candidates 
+
+        candidate_output_embedding = []
+        for idx in range(candidate_dense_embedding.shape[1]):
+            candidate_individual_embedding = candidate_dense_embedding[:,idx, :]
+            candidate_individual_embedding = candidate_individual_embedding.unsqueeze(1)
+            out_candidates, y_candidates = self.lstm(candidate_individual_embedding, (h0, c0))
+            candidate_output_embedding.append(out_candidates)
+        candidate_output_embedding = torch.cat(candidate_output_embedding, dim=1)
+
+        dense_score = torch.bmm(query_output_embedding, candidate_output_embedding.transpose(dim0=1,dim1=2)).squeeze()
+
+        score = dense_score + candidate_sparse_score * self.sparse_weight
+
+        # calculate the dense score 
+        return score
 
             
         """

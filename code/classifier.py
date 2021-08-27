@@ -13,6 +13,7 @@ from torch.utils.data import Dataset,DataLoader, dataset
 from tqdm import tqdm
 from transformers.models import bert
 import sys 
+import time
 sys.path.append("/home/megh/projects/entity-norm/syn/")
 from bne_resources.run_bne_for_pt import * 
 from dataset import Biosyn_Dataset, Graph_Dataset, Mention_Dataset, BNE_Dataset, load_data, data_split
@@ -956,7 +957,7 @@ class CrossEncoder_Classifier():
 
 
 class BNE_Classifier():
-    def __init__(self,args):
+    def __init__(self,args, input_embedding_file = os.path.join("../bne_resources/embeddings/BioEmb/Emb_SGsc.txt")):
         self.args = args
         self.filename = self.args['filename']
         self.use_text_preprocesser = self.args['use_text_preprocesser']
@@ -964,16 +965,33 @@ class BNE_Classifier():
         self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'], test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
         self.embedding_type = args['emb_type']
-        
+
+        start = time.time()
+        f = open(input_embedding_file,"r")
+        self.input_embedding = [line.replace("\n","") for line in f]
+        self.bne_name_list, self.bne_val_list = self.separate_name_and_vector(self.input_embedding[1:])
+        f.close()
+        end = time.time()
+        print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=200, num_layers=1)
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=1)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
-        
+
+    def separate_name_and_vector(self, ip_embedding):
+        bne_name_list = []
+        embedding_vals = []
+        for line in ip_embedding:
+            line_split = str(line).split(" ")
+            bne_name_list.append(line_split[:1][0])
+            temp_arr = np.array(line_split[1:],dtype=np.float32)
+            embedding_vals.append(temp_arr)
+            break
+        return bne_name_list, embedding_vals
     # get the embeddings of mention_array(name_array or query_array)
     def get_mention_array_bert_embedding(self,mention_array):
         
@@ -1016,7 +1034,7 @@ class BNE_Classifier():
             path_of_name_file = os.path.join(pth_check,"names.txt")
         return batch_sentence, path_of_name_file
             
-    def get_bne_embedings(self, mention_array):
+    def get_bne_embedings_from_command_line(self, mention_array):
         mention_dataset = Mention_Dataset(mention_array,self.tokenizer)       
         mentions_embedding = []
         mention_dataloader = DataLoader(mention_dataset, batch_size = 1024)
@@ -1027,7 +1045,6 @@ class BNE_Classifier():
         with torch.no_grad():
             for idx, (input_ids, attention_mask) in enumerate(mention_dataloader):
                 input_ids_complete_list.append(input_ids)
-
             input_ids_complete_list = torch.cat(input_ids_complete_list,0)  
             input_ids_complete_list = input_ids_complete_list.cuda()
             # Get cumulative embeddings using tensorflow 1.x routine
@@ -1039,6 +1056,22 @@ class BNE_Classifier():
         mentions_embedding = cls_embedding
         print("Shape of Mentions Embeddings - ", mentions_embedding.shape)
         return mentions_embedding
+    
+    def get_bne_embeddings(self, mention_array):
+        print(len(mention_array))
+        for mention in mention_array:
+            mention_words = str(mention.split(" "))
+            mention_embedding = 0
+            for word in mention_words:
+                mention_index = self.bne_name_list.index(str(word))
+                
+
+        mention_dataset = Mention_Dataset(mention_array,self.tokenizer)       
+        mentions_embedding = []
+        mention_dataloader = DataLoader(mention_dataset, batch_size = 1024)
+        print("Length of Mentions Dataloder is - ", len(mention_dataloader.dataset))
+        sys.exit()
+
 
     # this function will use too much memory, so we calculate the score for single batch
     def get_score_matrix(self,query_array):
@@ -1051,8 +1084,8 @@ class BNE_Classifier():
             name_bert_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
             
         elif self.embedding_type == 'bne':
-            query_bert_embedding = self.get_bne_embedings(query_array).cuda()
-            name_bert_embedding = self.get_bne_embedings(self.name_array).cuda()
+            query_bert_embedding = self.get_bne_embeddings(query_array).cuda()
+            name_bert_embedding = self.get_bne_embeddings(self.name_array).cuda()
         
         bert_score_matrix = torch.matmul(query_bert_embedding,name_bert_embedding.transpose(0,1))
 
@@ -1081,7 +1114,7 @@ class BNE_Classifier():
             if self.embedding_type == 'bert':
                 names_dense_embedding = self.get_mention_array_bert_embedding(self.name_array).cuda()
             elif self.embedding_type == 'bne':
-                names_dense_embedding = self.get_bne_embedings(self.name_array).cuda()
+                names_dense_embedding = self.get_bne_embeddings(self.name_array).cuda()
 
             print("Shape of names_sparse_embedding is ", names_sparse_embedding.shape)
             print("names_dense_embedding shape ", names_dense_embedding.shape)
@@ -1093,14 +1126,16 @@ class BNE_Classifier():
             if self.embedding_type == 'bert':
                 bert_enc = self.emb_model.bert_encoder
             elif self.embedding_type == 'bne':
+                self.emb_model = self.emb_model.cuda().double()
                 bert_enc = self.emb_model
+
 
             if self.embedding_type == 'bne':
                 ds = BNE_Dataset(self.name_array,self.queries_train,self.mention2id,self.args['top_k'],
                 sparse_encoder = self.sparse_encoder,encoder = bert_enc,
                 names_sparse_embedding = names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
                 bert_ratio=self.args['bert_ratio'],
-                tokenizer= self.tokenizer)
+                tokenizer= self.tokenizer, bne_name_list = self.bne_name_list, embedding_vals = self.bne_val_list)
             
 
             data_loader = DataLoader(dataset=ds,batch_size=self.args['batch_size'])
@@ -1111,22 +1146,28 @@ class BNE_Classifier():
 
                 optimizer.zero_grad()
                 if self.embedding_type == 'bne':
-                    query_dense_embedding,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score,labels = batch_data
+                    query_dense_input_embedding, candidates_dense_input_embeddings,candidates_sparse_score, labels = batch_data
+                    query_dense_input_embedding = query_dense_input_embedding.cuda()
+                    candidates_dense_input_embeddings = candidates_dense_input_embeddings.cuda()
+
+                
+                """
                 if not self.embedding_type == 'bne':
                     query_ids = query_ids.cuda()
                     query_attention_mask = query_attention_mask.cuda()
+                
+                """    
+      
 
-                candidates_names_ids = candidates_names_ids.cuda()
-                candidates_names_attention_mask = candidates_names_attention_mask.cuda()
+                #candidates_names_ids = candidates_names_ids.cuda()
+                #candidates_names_attention_mask = candidates_names_attention_mask.cuda()
                 candidates_sparse_score = candidates_sparse_score.cuda()
                 labels = labels.cuda()
-                
-                print(labels)
 
                 if self.embedding_type == 'bert':
                     score = self.emb_model.forward(query_ids,query_attention_mask,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
                 elif self.embedding_type == 'bne':
-                    score = self.emb_model(query_dense_embedding,candidates_names_ids,candidates_names_attention_mask,candidates_sparse_score)
+                    score = self.emb_model(query_dense_input_embedding,candidates_dense_input_embeddings,candidates_sparse_score)
   
                 loss = criterion(score,labels)
                 loss_sum+=loss.item()
@@ -1170,6 +1211,7 @@ class BNE_Classifier():
                 query_indices = torch.LongTensor([self.mention2id[query] for query in array]).cuda()
                 accu_1 += (indices[:,0]==query_indices).sum()/len(query_array)
                 accu_k += (indices[:,:self.args['eval_k']]== torch.unsqueeze(query_indices,dim=1)).sum()/len(query_array)
+
         self.args['logger'].info("epoch %d done, accu_1 = %f, accu_%d = %f"%(epoch,float(accu_1),self.args['eval_k'], float(accu_k)))
         return accu_1,accu_k
         
