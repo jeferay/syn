@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--filename',type=str,default='../data/datasets/cl.obo')
     parser.add_argument('--classifier_name',type=str,default='graphsage')
     parser.add_argument('--use_text_preprocesser',action='store_true',default=False)
-    parser.add_argument('--is_unseen',action='store_true',default=True)
+    parser.add_argument('--is_unseen',type=int ,default=True)
     parser.add_argument('--stage_1_model_path',type=str,default='../biobert')
     parser.add_argument('--stage_1_exp_path',type=str,default='../exp/cl/stage_1/unseen')
     parser.add_argument('--stage_2_model_path',type=str,default='../exp/cl/checkpoint_9')

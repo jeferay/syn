@@ -967,31 +967,29 @@ class BNE_Classifier():
         self.embedding_type = args['emb_type']
 
         start = time.time()
-        f = open(input_embedding_file,"r")
-        self.input_embedding = [line.replace("\n","") for line in f]
-        self.bne_embedding_dict = self.separate_name_and_vector(self.input_embedding[1:])
-        f.close()
+        self.bne_embedding_dict = self.separate_name_and_vector(input_embedding_file)
         end = time.time()
+        
         print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
+
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=1)
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=5)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
 
-    def separate_name_and_vector(self, ip_embedding):
-        bne_name_list = []
-        embedding_vals = []
+    def separate_name_and_vector(self, input_embedding_file):
         bne_embedding_dict= {}
+        ip_embedding = open(input_embedding_file,"r")
         for line in ip_embedding:
+            line = line.replace("\n","")
             line_split = str(line).split(" ")
-            bne_name_list.append(line_split[:1][0])
             temp_arr = np.array(line_split[1:],dtype=np.float32)
-            embedding_vals.append(temp_arr)
             bne_embedding_dict[line_split[:1][0]] = temp_arr
+        ip_embedding.close()
         return bne_embedding_dict
 
     # get the embeddings of mention_array(name_array or query_array)
@@ -1114,7 +1112,7 @@ class BNE_Classifier():
         elif self.embedding_type == 'bne':
             optimizer = torch.optim.Adam([
                 {'params': self.emb_model.parameters()}], 
-                lr=self.args['stage_1_lr'], weight_decay=self.args['stage_1_weight_decay']
+                lr=0.01, weight_decay=1e-7
             )
         for epoch in range(1, self.args['epoch_num'] + 1):
             loss_sum = 0
@@ -1214,7 +1212,7 @@ class BNE_Classifier():
         return accu_1,accu_k
         
     def save_model(self,checkpoint_dir):
-        self.emb_model.bert_encoder.save_pretrained(checkpoint_dir)
+        self.emb_model.save_pretrained(checkpoint_dir)
         torch.save(self.emb_model.sparse_weight,os.path.join(checkpoint_dir,'sparse_weight.pth'))
 
     def load_model(self,model_path):
