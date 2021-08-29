@@ -467,7 +467,7 @@ class BNE_Dataset(Dataset):
         query = self.query_array[index]
   
         query_dense_embedding = self.bne_embedding_dict[str(query)].cuda().double()
-        query_characterwise_embedding = self.characterwise_embeddings_dict[str(query)],cuda().double()
+        query_characterwise_embedding = self.characterwise_embeddings_dict[str(query)].cuda().double()
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
 
         candidates_indices, sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
@@ -484,15 +484,17 @@ class BNE_Dataset(Dataset):
             candidate_classwise_embedding_list.append(self.characterwise_embeddings_dict[str(c_name)])
         
         candidate_dense_embedding = torch.cat(candidate_dense_embedding_list,dim=0)
-        candidate_classwise_embedding = torch.cat(candidate_classwise_embedding_list, dim=0)
+        candidate_characterwise_embedding = torch.cat(candidate_classwise_embedding_list, dim=0)
 
         labels = torch.LongTensor([self.mention2id[query]==self.mention2id[name] for name in candidates_names])
 
         assert(labels.shape==torch.Size([self.top_k]))
 
+        # characterwise embeddings are not being used for now - please ignore this.
+        query_characterwise_embedding = 0
+        candidate_characterwise_embedding = 0
 
-
-        return query_dense_embedding, query_classwise_embedding, candidate_dense_embedding, candidate_classwise_embedding, candidates_sparse_score, labels, 
+        return query_dense_embedding, candidate_dense_embedding, candidates_sparse_score, labels, 
 
     def __len__(self):
         return len(self.query_array)

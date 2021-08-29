@@ -229,7 +229,7 @@ class BiLSTM_BNE(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-        self.lstm_1 = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True) # First axis is batch which is set as true
 
         self.lstm_2 = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional = True)
 

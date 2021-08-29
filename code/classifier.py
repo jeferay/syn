@@ -973,7 +973,6 @@ class BNE_Classifier():
         print("Time taken to calculate embeddings of dataset is ", (end - start)/60, " mins")
 
         self.characterwise_embeddings_dict = self.get_character_embeddings()
-        sys.exit()
 
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
@@ -1012,6 +1011,7 @@ class BNE_Classifier():
                 max_char_len = length_name
         
         _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
+        self.all_embeddings_dict[" "] = torch.rand(1,200)
         return self.all_embeddings_dict, max_char_len, char_dict
 
 
@@ -1094,14 +1094,16 @@ class BNE_Classifier():
     # self.max_char_len * 200
     def get_character_embeddings(self):
         characterwise_embeddings_dict = {}
-
+        print("max is ", self.max_char_len)
         for key_ in self.all_embeddings_dict.keys():
             iteration_embedding_list = []
             if len(key_) !=1:
                 for char_ in str(key_):
                     e = self.all_embeddings_dict[char_]
                     iteration_embedding_list.append(e)
-                print(len(iteration_embedding_list))
+                iteration_embedding = torch.cat(iteration_embedding_list, dim = 0)
+                iteration_embedding.requires_grad = True # trainable character embeddings
+            characterwise_embeddings_dict[str(key_)] = iteration_embedding
         return characterwise_embeddings_dict
 
 
@@ -1208,9 +1210,13 @@ class BNE_Classifier():
             for iteration, batch_data in tqdm(enumerate(data_loader), total=len(data_loader)):
                 optimizer.zero_grad()
                 if self.embedding_type == 'bne':
-                    query_dense_input_embedding, candidates_dense_input_embeddings,candidates_sparse_score, labels = batch_data
+
+                    query_dense_input_embedding,  candidates_dense_input_embeddings,
+                    candidates_sparse_score, labels = batch_data
+
                     query_dense_input_embedding = query_dense_input_embedding.cuda()
                     candidates_dense_input_embeddings = candidates_dense_input_embeddings.cuda()
+                    
 
                 candidates_sparse_score = candidates_sparse_score.cuda()
                 labels = labels.cuda()
