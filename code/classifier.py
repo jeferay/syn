@@ -962,25 +962,15 @@ class BNE_Classifier():
         self.filename = self.args['filename']
         self.use_text_preprocesser = self.args['use_text_preprocesser']
         self.name_array,query_id_array,self.mention2id,self.egde_index = load_data(self.filename,self.use_text_preprocesser)
-        list_name_array = list(self.name_array)
-        composite_name_file = open(os.path.join("../bne_resources/dataset_all_names_obo.txt"),"w")
-        for item in list_name_array:
-            item = str(item)
-            composite_name_file.write(item + "\n")
-        for item in list(query_id_array):
-            item  = str(item[0])
-            composite_name_file.write(item + "\n")
-        composite_name_file.close()
-        _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
-        self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array=query_id_array,is_unseen=self.args['is_unseen'], test_size=0.33)
+        
+
+        self.queries_train,self.queries_valid,self.queries_test = data_split(query_id_array = query_id_array,is_unseen=self.args['is_unseen'], test_size=0.33)
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
         self.embedding_type = args['emb_type']
-
         start = time.time()
-        #self.bne_embedding_dict = self.separate_name_and_vector(input_embedding_file)
+        self.all_embeddings_dict = self.get_all_embeddings(self.name_array, query_id_array)
         end = time.time()
-
-        print("Time to load and process pretrained embedding file is (in min)", (end - start)/60)
+        print("Time taken to calculate embeddings of dataset is ", (end - start)/60, " mins")
 
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
@@ -990,6 +980,29 @@ class BNE_Classifier():
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
+
+    def get_all_embeddings(self, name_array,query_id_array ):
+        list_name_array = list(name_array)
+        # write the embeddings for all possible names in the dataset
+        composite_name_file = open(os.path.join("../bne_resources/dataset_all_names_obo.txt"),"w")
+        char_dict = {}
+        for item in list_name_array:
+            item = str(item)
+            composite_name_file.write(item + "\n")
+            for char in item:
+                char_dict[char] = 1
+        for item in list(query_id_array):
+            item  = str(item[0])
+            composite_name_file.write(item + "\n")
+            for char in item:
+                char_dict[char] = 1
+        # write the embeddings for all possible characters in the dataset
+        for char in char_dict.keys():
+            composite_name_file.write(str(char) + "\n")
+        composite_name_file.close()
+        _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
+        return self.all_embeddings_dict
+
 
     def separate_name_and_vector(self, input_embedding_file):
         bne_embedding_dict= {}
