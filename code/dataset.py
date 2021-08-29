@@ -405,7 +405,7 @@ class Biosyn_Dataset(Dataset):
         return len(self.query_array)
 
 class BNE_Dataset(Dataset):
-    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, bne_embedding_dict):
+    def __init__(self,name_array,query_array,mention2id,top_k,sparse_encoder, encoder,names_sparse_embedding, names_dense_embedding,bert_ratio, tokenizer, bne_embedding_dict, characterwise_embeddings_dict):
 
         """
         args:
@@ -435,6 +435,7 @@ class BNE_Dataset(Dataset):
         self.tokenizer = tokenizer
 
         self.bne_embedding_dict = bne_embedding_dict
+        self.characterwise_embeddings_dict = characterwise_embeddings_dict
         
     # use score matrix to get candidate indices, return a tensor of shape(self.top_k,)
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
@@ -466,6 +467,7 @@ class BNE_Dataset(Dataset):
         query = self.query_array[index]
   
         query_dense_embedding = self.bne_embedding_dict[str(query)].cuda().double()
+        query_characterwise_embedding = self.characterwise_embeddings_dict[str(query)],cuda().double()
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
 
         candidates_indices, sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
@@ -475,16 +477,22 @@ class BNE_Dataset(Dataset):
         
         # getting the candidate untrainable embeddings same way as the query
         candidate_dense_embedding_list= []
+        candidate_classwise_embedding_list = []
+
         for c_name in candidates_names:
             candidate_dense_embedding_list.append(self.bne_embedding_dict[str(c_name)])
+            candidate_classwise_embedding_list.append(self.characterwise_embeddings_dict[str(c_name)])
         
         candidate_dense_embedding = torch.cat(candidate_dense_embedding_list,dim=0)
+        candidate_classwise_embedding = torch.cat(candidate_classwise_embedding_list, dim=0)
 
         labels = torch.LongTensor([self.mention2id[query]==self.mention2id[name] for name in candidates_names])
 
         assert(labels.shape==torch.Size([self.top_k]))
 
-        return query_dense_embedding, candidate_dense_embedding, candidates_sparse_score, labels
+
+
+        return query_dense_embedding, query_classwise_embedding, candidate_dense_embedding, candidate_classwise_embedding, candidates_sparse_score, labels, 
 
     def __len__(self):
         return len(self.query_array)

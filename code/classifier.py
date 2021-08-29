@@ -968,9 +968,12 @@ class BNE_Classifier():
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
         self.embedding_type = args['emb_type']
         start = time.time()
-        self.all_embeddings_dict = self.get_all_embeddings(self.name_array, query_id_array)
+        self.all_embeddings_dict, self.max_char_len, self.char_dict = self.get_all_embeddings_initial(self.name_array, query_id_array)
         end = time.time()
         print("Time taken to calculate embeddings of dataset is ", (end - start)/60, " mins")
+
+        self.characterwise_embeddings_dict = self.get_character_embeddings()
+        sys.exit()
 
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
@@ -981,7 +984,7 @@ class BNE_Classifier():
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
 
-    def get_all_embeddings(self, name_array,query_id_array ):
+    def get_all_embeddings_initial(self, name_array,query_id_array ):
         list_name_array = list(name_array)
         # write the embeddings for all possible names in the dataset
         composite_name_file = open(os.path.join("../bne_resources/dataset_all_names_obo.txt"),"w")
@@ -996,12 +999,20 @@ class BNE_Classifier():
             composite_name_file.write(item + "\n")
             for char in item:
                 char_dict[char] = 1
+
         # write the embeddings for all possible characters in the dataset
         for char in char_dict.keys():
             composite_name_file.write(str(char) + "\n")
         composite_name_file.close()
+        composite_file = open(os.path.join("../bne_resources/dataset_all_names_obo.txt"),"r")
+        max_char_len = 0
+        for line_ in composite_file:
+            length_name = len(line_.replace("\n",""))
+            if length_name > max_char_len:
+                max_char_len = length_name
+        
         _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
-        return self.all_embeddings_dict
+        return self.all_embeddings_dict, max_char_len, char_dict
 
 
     def separate_name_and_vector(self, input_embedding_file):
@@ -1080,12 +1091,25 @@ class BNE_Classifier():
         print("Shape of Mentions Embeddings - ", mentions_embedding.shape)
         return mentions_embedding
     
+    # self.max_char_len * 200
+    def get_character_embeddings(self):
+        characterwise_embeddings_dict = {}
+
+        for key_ in self.all_embeddings_dict.keys():
+            iteration_embedding_list = []
+            if len(key_) !=1:
+                for char_ in str(key_):
+                    e = self.all_embeddings_dict[char_]
+                    iteration_embedding_list.append(e)
+                print(len(iteration_embedding_list))
+        return characterwise_embeddings_dict
+
+
     def get_bne_embeddings(self, mention_array):
         self.emb_model.eval()
         self.emb_model.cuda()
         num_word_not_found = 0
         mention_embedding_list = []
-
         for mention in mention_array:
             e = self.emb_model.lstm(self.all_embeddings_dict[mention].unsqueeze(0).cuda())[0].cpu()[0]
             mention_embedding_list.append(e)
@@ -1174,7 +1198,8 @@ class BNE_Classifier():
                 sparse_encoder = self.sparse_encoder,encoder = bert_enc,
                 names_sparse_embedding = names_sparse_embedding,names_dense_embedding = names_dense_embedding, 
                 bert_ratio = self.args['bert_ratio'],
-                tokenizer = self.tokenizer, bne_embedding_dict = self.all_embeddings_dict)
+                tokenizer = self.tokenizer, bne_embedding_dict = self.all_embeddings_dict,
+                characterwise_embeddings_dict = self.characterwise_embeddings_dict)
             
             data_loader = DataLoader(dataset=ds,batch_size=self.args['batch_size'])
             print("Length of the dataset is ", len(data_loader.dataset))
