@@ -259,7 +259,7 @@ def data_split(query_id_array,is_unseen=True,test_size = 0.33):
     if is_unseen == False:
         queries_train,queries_test = train_test_split(mentions,test_size=test_size)#have already set up seed 
         queries_valid,queries_test = train_test_split(queries_test,test_size=0.5)
-        return np.array(queries_train),np.array(queries_valid),np.array(queries_test)
+        return np.array(queries_train), np.array(queries_valid), np.array(queries_test)
     
     #random split, and the concepts in train set and test set will not overlap
     else:
@@ -417,7 +417,8 @@ class BNE_Dataset(Dataset):
             bert_score_matrix: tensor of shape(num_query, num_name)
 
         """
-        super(BNE_Dataset,self).__init__()
+
+        super(BNE_Dataset, self).__init__()
         self.name_array = name_array
         self.query_array = query_array
         self.mention2id = mention2id
@@ -439,13 +440,15 @@ class BNE_Dataset(Dataset):
     def get_candidates_indices(self,query_sparse_embedding, query_dense_embedding):
 
         candidates_indices = torch.LongTensor(size=(self.top_k,)).cuda()
-        sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)),self.names_sparse_embedding.transpose(0,1))).squeeze()
+        sparse_score = (torch.matmul(torch.reshape(query_sparse_embedding,shape=(1,-1)), self.names_sparse_embedding.transpose(0,1))).squeeze()
+
         _,sparse_indices = torch.sort(sparse_score,descending=True)
         dense_score = (torch.matmul(torch.reshape(query_dense_embedding,shape=(1,-1)),self.names_dense_embedding.transpose(0,1))).squeeze()
         _,dense_indices = torch.sort(dense_score,descending=True)
 
         candidates_indices[:self.n_sparse] = sparse_indices[:self.n_sparse]
         j = 0
+        
         for i in range(self.n_sparse,self.top_k):
             while dense_indices[j] in candidates_indices[:self.n_sparse]:
                 j+=1
@@ -461,26 +464,8 @@ class BNE_Dataset(Dataset):
             ids,masks and sparse_scores of candidates indices(for later predictioon)
         """
         query = self.query_array[index]
-
-        # this procedure of calculating average of the constituent of the word embeddings is used to save time and space
-        query_individual_words = query.split(" ")
-        query_dense_embedding = 0
-        
-        use_average = True # debug use_average later
-        if not use_average:
-            query_dense_embedding = []
-        for idx, word in enumerate(query_individual_words):
-            if use_average:
-                try:
-                    query_dense_embedding+= self.bne_embedding_dict[word]
-                except:
-                    query_dense_embedding+= np.random.rand(200,)
-
-        if use_average:
-            query_dense_embedding = query_dense_embedding/(idx+1)
-
-        query_dense_embedding = torch.tensor(query_dense_embedding).cuda().double()
-
+  
+        query_dense_embedding = self.bne_embedding_dict[str(query)].cuda().double()
         query_sparse_embedding = torch.FloatTensor(self.sparse_encoder.transform([query]).toarray()).cuda()
 
         candidates_indices, sparse_score = self.get_candidates_indices(query_sparse_embedding,query_dense_embedding)
@@ -491,16 +476,7 @@ class BNE_Dataset(Dataset):
         # getting the candidate untrainable embeddings same way as the query
         candidate_dense_embedding_list= []
         for c_name in candidates_names:
-            c_name_individual = c_name.split(" ")
-            candidate_dense_embedding = 0
-            for idx, word in enumerate(c_name_individual):
-                try:
-                    candidate_dense_embedding+= self.bne_embedding_dict[str(word)]
-                except:
-                    candidate_dense_embedding+=np.random.rand(200,)
-            candidate_dense_embedding = candidate_dense_embedding/(idx+1)
-            candidate_dense_embedding = torch.tensor(candidate_dense_embedding).cuda().unsqueeze(0)
-            candidate_dense_embedding_list.append(candidate_dense_embedding)
+            candidate_dense_embedding_list.append(self.bne_embedding_dict[str(c_name)])
         
         candidate_dense_embedding = torch.cat(candidate_dense_embedding_list,dim=0)
 

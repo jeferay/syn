@@ -243,7 +243,7 @@ class BiLSTM_BNE(nn.Module):
 
     def forward(self, query_dense_embeddings, candidate_dense_embedding, candidate_sparse_score):    
         # modify dim to fit into pytorch LSTM scheme
-        query_dense_embeddings = query_dense_embeddings.unsqueeze(1)
+        query_dense_embeddings = query_dense_embeddings
 
         h0 = torch.zeros(self.num_layers * 2, query_dense_embeddings.size(0), self.hidden_size).cuda().double() # initial hidden state
         c0 = torch.zeros(self.num_layers * 2, query_dense_embeddings.size(0), self.hidden_size).cuda().double() # initial cell state
@@ -258,6 +258,7 @@ class BiLSTM_BNE(nn.Module):
             candidate_individual_embedding = candidate_individual_embedding.unsqueeze(1)
             out_candidates, y_candidates = self.lstm(candidate_individual_embedding, (h0, c0))
             candidate_output_embedding.append(out_candidates)
+
         candidate_output_embedding = torch.cat(candidate_output_embedding, dim=1)
 
         dense_score = torch.bmm(query_output_embedding, candidate_output_embedding.transpose(dim0=1,dim1=2)).squeeze()
@@ -265,7 +266,7 @@ class BiLSTM_BNE(nn.Module):
         score = dense_score + candidate_sparse_score * self.sparse_weight
 
         # calculate the dense score 
-        return score
+        return score, query_dense_embeddings, candidate_dense_embedding
 
             
         """
