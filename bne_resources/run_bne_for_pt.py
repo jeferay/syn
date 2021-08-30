@@ -4,7 +4,7 @@ import subprocess
 import numpy as np
 import torch
 
-def do_tensorflow_routine(path_name_file):
+def do_tensorflow_routine(path_name_file, grad_needed_for_embeddings = True):
     os.chdir(os.path.join("../","bne_resources/"))
     subprocess.run(f"""source activate bne
     python bne.py --model models/BNE_SGsc --fe ./embeddings/BioEmb/Emb_SGsc.txt --fi %s --fo %s.txt

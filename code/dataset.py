@@ -493,7 +493,8 @@ class BNE_Dataset(Dataset):
         # characterwise embeddings are not being used for now - please ignore this.
         query_characterwise_embedding = 0
         candidate_characterwise_embedding = 0
-
+        query_dense_embedding.requires_grad  = True
+        candidate_dense_embedding.requires_grad = True
         return query_dense_embedding, candidate_dense_embedding, candidates_sparse_score, labels, 
 
     def __len__(self):

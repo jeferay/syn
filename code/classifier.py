@@ -977,7 +977,7 @@ class BNE_Classifier():
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=5)
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=10)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
@@ -1011,7 +1011,8 @@ class BNE_Classifier():
                 max_char_len = length_name
         
         _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
-        self.all_embeddings_dict[" "] = torch.rand(1,200)
+        self.all_embeddings_dict[" "] = torch.rand(1,200).requires_grad
+
         return self.all_embeddings_dict, max_char_len, char_dict
 
 
@@ -1097,9 +1098,11 @@ class BNE_Classifier():
         print("max is ", self.max_char_len)
         for key_ in self.all_embeddings_dict.keys():
             iteration_embedding_list = []
-            if len(key_) !=1:
+            if not len(key_) == 1:
                 for char_ in str(key_):
                     e = self.all_embeddings_dict[char_]
+                    if type(e) == bool:
+                        continue
                     iteration_embedding_list.append(e)
                 iteration_embedding = torch.cat(iteration_embedding_list, dim = 0)
                 iteration_embedding.requires_grad = True # trainable character embeddings
@@ -1170,6 +1173,7 @@ class BNE_Classifier():
                 {'params': self.emb_model.parameters()}], 
                 lr=0.01, weight_decay=1e-7
             )
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer,gamma=0.9)
         for epoch in range(1, self.args['epoch_num'] + 1):
             loss_sum = 0
             self.emb_model.train()
@@ -1210,9 +1214,7 @@ class BNE_Classifier():
             for iteration, batch_data in tqdm(enumerate(data_loader), total=len(data_loader)):
                 optimizer.zero_grad()
                 if self.embedding_type == 'bne':
-
-                    query_dense_input_embedding,  candidates_dense_input_embeddings,
-                    candidates_sparse_score, labels = batch_data
+                    query_dense_input_embedding,  candidates_dense_input_embeddings,candidates_sparse_score, labels = batch_data
 
                     query_dense_input_embedding = query_dense_input_embedding.cuda()
                     candidates_dense_input_embeddings = candidates_dense_input_embeddings.cuda()
@@ -1229,7 +1231,7 @@ class BNE_Classifier():
                 loss.backward()
                 optimizer.step()
 
-            
+            scheduler.step()
             loss_sum/=len(self.queries_train)
 
             
