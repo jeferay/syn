@@ -977,7 +977,7 @@ class BNE_Classifier():
         if self.embedding_type == 'bert':
             self.emb_model = Biosyn_Model(model_path = self.args['stage_1_model_path'], initial_sparse_weight = self.args['initial_sparse_weight'])
         elif self.embedding_type == 'bne':
-            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=10)
+            self.emb_model = BiLSTM_BNE(input_size=200, hidden_size=100, num_layers=5)
 
         self.sparse_encoder = TfidfVectorizer(analyzer='char', ngram_range=(1, 2))# only works on cpu
         self.sparse_encoder.fit(self.name_array)
@@ -1173,8 +1173,10 @@ class BNE_Classifier():
                 {'params': self.emb_model.parameters()}], 
                 lr=0.01, weight_decay=1e-7
             )
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer,gamma=0.9)
-        for epoch in range(1, self.args['epoch_num'] + 1):
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer,gamma=0.95)
+
+        for epoch in range(1, self.args['epoch_num'] + 1): 
+            print("Learning Rate for epoch ", epoch, "is ", scheduler.get_lr())
             loss_sum = 0
             self.emb_model.train()
             self.emb_model.double()
@@ -1231,7 +1233,7 @@ class BNE_Classifier():
                 loss.backward()
                 optimizer.step()
 
-            scheduler.step()
+            #scheduler.step()
             loss_sum/=len(self.queries_train)
 
             
@@ -1242,11 +1244,12 @@ class BNE_Classifier():
                     os.makedirs(checkpoint_dir)
                 self.save_model(checkpoint_dir)
             
-            accu_1, accu_k = self.eval(self.queries_valid,epoch = epoch)  
-            print(accu_1.cpu().data.item(), accu_k.cpu().data.item())
+            accu_1, accu_k = self.eval(self.queries_valid,epoch = epoch,mode = 'val')  
+            accu_1_test, accu_k_test = self.eval(self.queries_test,epoch = epoch, mode = 'test')
+  
 
     #@torch.no_grad()
-    def eval(self,query_array,load_model=False,epoch = 0):
+    def eval(self,query_array,load_model=False,epoch = 0, mode='val'):
         self.emb_model.eval()# for nn.module
         accu_1 = torch.FloatTensor([0]).cuda()
         accu_k = torch.FloatTensor([0]).cuda()
@@ -1269,7 +1272,7 @@ class BNE_Classifier():
                 accu_1 += (indices[:,0]==query_indices).sum()/len(query_array)
                 accu_k += (indices[:,:self.args['eval_k']]== torch.unsqueeze(query_indices,dim=1)).sum()/len(query_array)
 
-        self.args['logger'].info("epoch %d done, accu_1 = %f, accu_%d = %f"%(epoch,float(accu_1),self.args['eval_k'], float(accu_k)))
+        self.args['logger'].info("epoch %d done, accu_1_%s = %f, accu_%d_%s = %f"%(epoch,str(mode),float(accu_1),self.args['eval_k'],str(mode), float(accu_k)))
         return accu_1,accu_k
         
     def save_model(self,checkpoint_dir):

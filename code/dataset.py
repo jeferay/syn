@@ -93,7 +93,7 @@ class TextPreprocess():
 
 #catch all suitable datasets on the website
 def get_all_data(filename='../data/ontologies.jsonld'):
-    specific_problem_ids=['rs','fix','eo','envo']# for some unkonwn reasons, rs.obo, fix.obo and eo.obo can not be downloaded;and envo has a strange problem
+    specific_problem_ids=['hp','doid','fbbt','mp']# for some unkonwn reasons, rs.obo, fix.obo and eo.obo can not be downloaded;and envo has a strange problem
     urls = []
     ids = []
     with open(filename,mode='r',encoding='utf-8') as f:
@@ -493,8 +493,9 @@ class BNE_Dataset(Dataset):
         # characterwise embeddings are not being used for now - please ignore this.
         query_characterwise_embedding = 0
         candidate_characterwise_embedding = 0
-        query_dense_embedding.requires_grad  = True
-        candidate_dense_embedding.requires_grad = True
+        
+        #query_dense_embedding.requires_grad  = True
+        #candidate_dense_embedding.requires_grad = True
         return query_dense_embedding, candidate_dense_embedding, candidates_sparse_score, labels, 
 
     def __len__(self):
@@ -520,4 +521,5 @@ class Graph_Dataset(Dataset):
         return len(self.query_array)
 
 if __name__ == '__main__':
-    load_data()
+    #load_data()
+    get_all_data()
