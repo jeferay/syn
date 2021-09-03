@@ -1,0 +1,94 @@
+Entered the "main" function of BNE inference ...
+Parsed the arguments passed to the python script ...
+Parsed the input name file ...
+The length of the names file is  39945
+The length of the individual words in the composite word is  152595
+Reserve Tokens are  ['<w>', '</w>', '<s>', '</s>', '</dsw>', '</unk>', '</pad>', '»']
+Read pretrained embeddings from ./embeddings/BioEmb/Emb_SGsc.txt.
+Loaded pretrained We ... 
+Load 8179/8549 pretrained word embeddings
+Some words that do not have pretrained embeddings: lysinemia; megadactyly; abnromal; sanguification; cacordase; micromelanosome; hyposerinemia; hyperlobular; hyperthreoninuria; periinsulinitis; galactophori; odontogeny; metablastic; palperbra; amblygeustia; craniocele; valinaemia; gonecysts; atretoblepharia; nuclrear
+Created dictionary of word to IDs ...
+Doing sequence model word embeddings ... (NOT average word embeddings of individual words)
+Finished loading model/evaluation parameters from the json file here -  models/BNE_SGsc/params.json
+Inside function Definition of Encoder Model ....
+Load pretrained model from models/BNE_SGsc/best_model
+Loaded the model weights into the session ...
+Finished getting word embeddings of shape -  (8179, 200)
+Shape of the embedding placeholder for feed_dict is  (8179, 200)
+Finished loading the encoder from the BNE class ...
+Finished batching the data ..
+Calculate name embeddings for 39 batches
+Write result into ../bne_resources/dataset_all_names_obo_emb_sgsc.txt
+Experiment arguments are:  {'filename': '../data/datasets/mp.obo', 'classifier_name': 'bne', 'use_text_preprocesser': False, 'is_unseen': 1, 'stage_1_model_path': '../biobert', 'stage_1_exp_path': '../exp/cl/stage_1/unseen', 'stage_2_model_path': '../exp/cl/checkpoint_9', 'stage_2_exp_path': '../exp/cl/stage_2', 'vocab_file': '../biobert/vocab.txt', 'initial_sparse_weight': 1.0, 'bert_ratio': 0.5, 'stage_1_lr': 1e-05, 'stage_1_weight_decay': 0, 'stage_2_lr': 0.01, 'stage_2_weight_decay': 0, 'epoch_num': 100, 'top_k': 10, 'eval_k': 10, 'batch_size': 16, 'score_mode': 'hybrid', 'seed': 0, 'save_checkpoint_all': False, 'emb_type': 'bne', 'logger': <Logger ../exp/cl/stage_2 (INFO)>}
+mention num 39871
+names num 13752
+query num 26119
+edge num 16806
+Time taken to calculate embeddings of dataset is  0.8067989309628805  mins
+max is  186
+In train function ..
+Learning Rate for epoch  1 is  [0.01]
+Number of words not found 0
+Length of embedding list is  13752
+Shape of names_sparse_embedding is  torch.Size([13752, 770])
+names_dense_embedding shape  torch.Size([13752, 200])
+length of name_array 13752
+length of queries_train 17499
+Length of mentions to ID is 39871
+Length of the dataset is  17499
+Batch size is  16
+Length of Eval Dataset -  4310
+Number of batches in Eval dataset are -  5
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  214
+Number of words not found 0
+Length of embedding list is  13752
+Length of Eval Dataset -  4310
+Number of batches in Eval dataset are -  5
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  1024
+Number of words not found 0
+Length of embedding list is  13752
+Number of words not found 0
+Length of embedding list is  214
+Number of words not found 0
+Length of embedding list is  13752
+Learning Rate for epoch  2 is  [0.01]
+Number of words not found 0
+Length of embedding list is  13752
+Shape of names_sparse_embedding is  torch.Size([13752, 770])
+names_dense_embedding shape  torch.Size([13752, 200])
+length of name_array 13752
+length of queries_train 17499
+Length of mentions to ID is 39871
+Length of the dataset is  17499
+Batch size is  16

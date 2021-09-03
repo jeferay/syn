@@ -968,7 +968,7 @@ class BNE_Classifier():
         self.tokenizer = BertTokenizer(vocab_file=self.args['vocab_file'])
         self.embedding_type = args['emb_type']
         start = time.time()
-        self.all_embeddings_dict, self.max_char_len, self.char_dict = self.get_all_embeddings_initial(self.name_array, query_id_array)
+        self.all_embeddings_dict, self.max_char_len, self.char_dict = self.get_all_embeddings_initial(self.name_array, query_id_array,emb_require_grad = True)
         end = time.time()
         print("Time taken to calculate embeddings of dataset is ", (end - start)/60, " mins")
 
@@ -983,7 +983,7 @@ class BNE_Classifier():
         self.sparse_encoder.fit(self.name_array)
         self.embedding_type = self.args['emb_type']
 
-    def get_all_embeddings_initial(self, name_array,query_id_array ):
+    def get_all_embeddings_initial(self, name_array,query_id_array, emb_require_grad = True):
         list_name_array = list(name_array)
         # write the embeddings for all possible names in the dataset
         composite_name_file = open(os.path.join("../bne_resources/dataset_all_names_obo.txt"),"w")
@@ -1011,8 +1011,11 @@ class BNE_Classifier():
                 max_char_len = length_name
         
         _, self.all_embeddings_dict = do_tensorflow_routine(os.path.join("../bne_resources/dataset_all_names_obo.txt"))
-        self.all_embeddings_dict[" "] = torch.rand(1,200).requires_grad
+        self.all_embeddings_dict[" "] = torch.tensor(torch.rand(1,200),requires_grad=True)
 
+        for key_ in self.all_embeddings_dict.keys():
+            #print(self.all_embeddings_dict[key_].requires_grad)
+            pass
         return self.all_embeddings_dict, max_char_len, char_dict
 
 
@@ -1105,7 +1108,6 @@ class BNE_Classifier():
                         continue
                     iteration_embedding_list.append(e)
                 iteration_embedding = torch.cat(iteration_embedding_list, dim = 0)
-                iteration_embedding.requires_grad = True # trainable character embeddings
             characterwise_embeddings_dict[str(key_)] = iteration_embedding
         return characterwise_embeddings_dict
 

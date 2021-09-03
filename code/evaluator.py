@@ -9,8 +9,7 @@ def get_sorted_top_k(array, top_k=1, axis=-1, reverse=False):
     """
     if reverse:
         axis_length = array.shape[axis]
-        partition_index = np.take(np.argpartition(array, kth=-top_k, axis=axis),
-                                  range(axis_length - top_k, axis_length), axis)
+        partition_index = np.take(np.argpartition(array, kth=-top_k, axis=axis), range(axis_length - top_k, axis_length), axis)
     else:
         partition_index = np.take(np.argpartition(array, kth=top_k, axis=axis), range(0, top_k), axis)
     top_scores = np.take_along_axis(array, partition_index, axis)

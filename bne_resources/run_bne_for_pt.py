@@ -22,7 +22,10 @@ def do_tensorflow_routine(path_name_file, grad_needed_for_embeddings = True):
         embedding_list = line_split[1].split(' ')
         embedding_list = [float(i) for i in embedding_list]
         batch_embeddings.append(embedding_list)
-        embedding_list = torch.tensor(np.array(embedding_list)).unsqueeze(0)
+        embedding_list = torch.tensor(np.array(embedding_list),requires_grad=True).unsqueeze(0)
         embedding_name_dict[dict_key] = embedding_list
-    batch_embeddings = torch.tensor(np.array(batch_embeddings)).cuda().float()
+    batch_embeddings = torch.tensor(np.array(batch_embeddings),requires_grad=True).cuda().float()
     return batch_embeddings, embedding_name_dict
+
+if __name__ == "__main__":
+    pass
