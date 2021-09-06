@@ -13,10 +13,6 @@ class Sieves():
         self.normalized_queries = {}
         self.current_unnormalized_queries = self.query2id.copy()
         self.unnormalized_queries_final  = {}
-        self.all_forms_queries_dict = {}
-        for key_ in self.query2id.keys():
-            self.all_forms_queries_dict[key_] = []
-
 
     def process_data_for_seive(self):
         name2id = {}
@@ -28,19 +24,16 @@ class Sieves():
             query2id[str(item[0])] =  int(item[1])
         return name2id, query2id
 
+    def sieve_classifier_exact_match(self, query_all_forms_list, query_original_form):
+        for name_ in self.name2id.keys():
+            name_ = str(name_)
+            if name_ in query_all_forms_list:
+                self.normalized_queries[query_original_form] = self.query2id[query_original_form]
+                del self.current_unnormalized_queries[query_original_form]
 
     def exact_match_sieve(self):
         for query_ in self.current_unnormalized_queries.keys():
-            for name_ in self.name_array:
-                query_ = str(query_)
-                name_ = str(name_)
-                if query_ == name_:
-                    print("Found exact match")
-                    self.normalized_queries[query_] = self.current_unnormalized_queries[query_].copy()
-            # deleting the entries from the unnormalized queries
-            for key_ in self.normalized_queries:
-                del self.current_unnormalized_queries[key_]
-            return 
+            self.sieve_classifier_exact_match([query_],query_)
 
     def concat_abbrevations_files(self, file_path_list = [os.path.join("../text_resources/semeval-wiki-abbreviations.txt"), os.path.join("../text_resources/ncbi-wiki-abbreviations.txt")]):
         all_abbrevations_dict  = {}
@@ -65,7 +58,6 @@ class Sieves():
 
     def abbrevation_expansion_sieve(self):
         self.all_abbrevations_dict  = self.concat_abbrevations_files()
-
         # this dict will be appended to the original dict after all the expanded forms are found
         expanded_query_dict  = {}
         for query_ in self.current_unnormalized_queries.keys():
@@ -78,13 +70,8 @@ class Sieves():
                 if expanded_word is None:
                     continue
                 query_expanded_copy = query_expanded_copy.replace(str(word_),str(expanded_word))
-
                 expanded_query_dict[query_expanded_copy] = self.current_unnormalized_queries[query_]
-                self.all_forms_queries_dict[str(query_)].append(query_expanded_copy)
-
-        self.current_unnormalized_queries =  self.merge_dict(self.current_unnormalized_queries, expanded_query_dict)
-        self.exact_match_sieve()
-        return
+            self.sieve_classifier_exact_match(expanded_query_dict.keys(), query_)
 
     def swap_positions(self, list_, pos1, pos2):
         list_[pos1], list_[pos2] = list_[pos2], list_[pos1]
@@ -109,7 +96,6 @@ class Sieves():
                 if word_idx !=total_words-1 and word_list_string[word_idx+1] == "the":
                     current_pp_phrase = [word_list_string[word_idx-1], word_list_string[word_idx], word_list_string[word_idx+1] + " " + word_list_string[word_idx+2]]
                 all_phrases.append(current_pp_phrase)  
-
         return all_phrases
 
 
@@ -122,7 +108,6 @@ class Sieves():
             words_query =  query_.split(" ")
             query_copy = (query_ + " ")[:-1]
             for word in words_query:
-                replaced_string_list = []
                 if str(word) not in prepositions_list:
                     continue
                 elif str(word) in prepositions_list:
@@ -131,34 +116,58 @@ class Sieves():
                             continue
                         elif str(preposition) != str(word):
                             query_copy.replace(str(word),str(preposition))
-                            replaced_string_list.append(query_copy)
                             form_1_query_dict[query_copy] = self.current_unnormalized_queries[query_]
-                            self.all_forms_queries_dict[query_].append(query_copy)
+            self.sieve_classifier_exact_match(form_1_query_dict.keys(),query_copy)
             
             # dropping preposition and swapping the substrings surrounding it
             form_2_query_dict = {}
             word_query = query_.split(" ") 
             word_query_copy = word_query.copy()
-            print(word_query_copy)
             for word_idx, word in enumerate(word_query):
                 if str(word) in prepositions_list and word_idx!=0:
                     self.swap_positions(word_query_copy, word_idx-1, word_idx+1)
                     word_query_copy.pop(word_idx)
                     string_new  = self.make_string_from_str_list(word_query_copy)
                     form_2_query_dict[string_new] = self.current_unnormalized_queries[query_]
-                    self.all_forms_queries_dict[query_].append(string_new)
-            
-            # bringing last token front and dropping the preposition
 
+            self.sieve_classifier_exact_match(form_2_query_dict.keys(),query_copy)
+
+            # form 3 modifications
+            form_3_query_dict = {}
             original_prepositional_phrases = self.split_string_into_prepostional_phrases(query_)
-            new_phrases  = []
 
-            for idx, phrase in enumerate(original_prepositional_phrases):
-                new_phrase  = [phrase[2],phrase[0]]
-                new_phrases.append(new_phrase)
-    
+            # form 4 modifications
+            # write code here
+            form_4_query_dict = {}
+          
+             
 
-            print(new_phrases)
+    def numbers_replacement_sieve(self):
+        number_mapping = {}
+        # initialize numbers mapping
+        for i in range(1,11):
+            number_mapping[i] = []
+        f = open(os.path.join("../text_resources/number.txt"),"r")
+        for line_ in f:
+            line_ = str(line_).replace("\n","")
+            line_split = line_.split("||")
+            number_mapping[int(line_split[0])].append(line_split[1])
+
+        for query_ in self.current_unnormalized_queries.keys():
+            word_query = query_.split(" ")
+            query_copy = query_.copy()
+            form_replacement_numbers  = {}
+            for word_ in word_query:
+                if word_.isnumeric() and int(word_) in number_mapping.keys():
+                    for form_ in number_mapping[int(word_)]:
+                        new_string  = query_copy.replace(word_, str(form_))
+                        form_replacement_numbers[new_string] = self.current_unnormalized_queries[query_]
+
+            self.sieve_classifier_exact_match(form_replacement_numbers.keys(),query_)
+
+
+
+
 
 
 
@@ -178,9 +187,7 @@ class Sieves():
         
     
     def run_sieves(self):
-        self.exact_match_sieve()
-        self.abbrevation_expansion_sieve()
-        self.subject_object_sieve()
+        self.numbers_replacement_sieve()
 
 if __name__ == '__main__':
     s_classifier = Sieves()
