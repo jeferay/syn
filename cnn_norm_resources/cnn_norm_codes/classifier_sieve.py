@@ -5,6 +5,7 @@ from code.dataset import *
 from utils import Utils
 import numpy as np
 import torch
+from ling import * 
 
 class Sieves():
 
@@ -15,6 +16,7 @@ class Sieves():
         self.current_unnormalized_queries = self.query2id.copy()
         self.unnormalized_queries_final  = {}
         self.util = util
+        self.ling = Ling()
 
     def process_data_for_seive(self):
         name2id = {}
@@ -138,7 +140,34 @@ class Sieves():
             new_phrases.append(self.util.prefixation(word_query, query_))
             new_phrases.append(self.util.affixation(word_query, query_))     
             self.exact_match_util(new_phrases,query_)
-    
+
+    def disorder_syn_replacement(self):
+        self.current_unnormalized_queries_for_iteration =  self.current_unnormalized_queries.copy()
+
+        for nameForTransformation in self.current_unnormalized_queries_for_iteration:
+            nameForTransformationTokens = nameForTransformation.split(" ")
+            modifier = self.util.getModifier(nameForTransformationTokens, self.ling.PLURAL_DISORDER_SYNONYMS)
+            if not modifier == "":
+
+                transformedNames = self.util.addUnique(transformedNames, self.util.substituteDiseaseModifierWithSynonyms(nameForTransformation, modifier, self.ling.PLURAL_DISORDER_SYNONYMS))
+
+                transformedNames.append(self.util.deleteTailModifier(nameForTransformationTokens, modifier))
+                continue
+            
+                      
+            modifier = self.util.getModifier(nameForTransformationTokens, self.ling.SINGULAR_DISORDER_SYNONYMS)
+            if not modifier == "":
+                transformedNames = self.util.addUnique(transformedNames, self.util.substituteDiseaseModifierWithSynonyms(nameForTransformation, modifier, self.ling.SINGULAR_DISORDER_SYNONYMS));
+                transformedNames = self.util.setList(transformedNames, self.util.deleteTailModifier(nameForTransformationTokens, modifier))
+                continue
+                       
+            transformedNames = self.util.addUnique(transformedNames, self.util.appendModifier(nameForTransformation, self.ling.SINGULAR_DISORDER_SYNONYMS))
+            self.exact_match_util(transformedNames, nameForTransformation)
+            print(transformedNames)
+
+    def stemming(self):
+        
+
 
     def analysis_dataset(self):
         prepositions_list  = ["in", "with", "on", "of"]
@@ -151,15 +180,18 @@ class Sieves():
                     preposition_count = preposition_count+1
             preposition_count_list.append(preposition_count)
         return
-        
+    
+    
     
     def run_sieves(self):
-        #self.sieve_exact_match()
-        #self.abbrevation_expansion_sieve()
-        #self.subject_object_sieve()
-        #self.numbers_replacement_sieve()
-        #self.hyphenation_sieve()
+        self.sieve_exact_match()
+        self.abbrevation_expansion_sieve()
+        self.subject_object_sieve()
+        self.numbers_replacement_sieve()
+        self.hyphenation_sieve()
         self.affix()
+        self.disorder_syn_replacement()
+
 
 
 

@@ -183,23 +183,55 @@ class Utils():
         affixatedPhrase = ""
         for stringToken in stringTokens:
             
-
             affix = (self.ling.AFFIX.split("|")[0] if  self.ling.AFFIX.split("|")[0] in stringToken else self.ling.AFFIX.split("|")[1]) if search(".*("+self.ling.AFFIX+").*", stringToken) else ""
             
             forAffixation = "" if affix=="" else self.ling.getAffixMap()[affix]
 
             affixatedPhrase = (stringToken if affix=="" else stringToken.replace(affix, forAffixation)) if affixatedPhrase=="" else (affixatedPhrase+" "+stringToken if affix=="" else affixatedPhrase + " " + stringToken.replace(affix, forAffixation))
-        
         return affixatedPhrase
        
+    def appendModifier(self, string, modifiers):
+        newPhrases = []
+        for modifier in modifiers:
+            newPhrase = string + " " + modifier
+            newPhrases.append(newPhrase)
+        return newPhrases;                
+
+    def deleteTailModifier(self, stringTokens, modifier):
+        return self.ling.getSubstring(stringTokens, 0, stringTokens.length-1) if stringTokens[len(stringTokens)-1] == modifier else ""
     
-    def affix(self, string):
-        stringTokens = string.split("\\s")
-        newPhrases = self.suffixation(stringTokens, string)
-        newPhrases.append(self.prefixation(stringTokens, string))
-        newPhrases.append(self.affixation(stringTokens, string))    
-        return newPhrases
-   
+    
+    def substituteDiseaseModifierWithSynonyms(self, string, toReplaceWord, synonyms):
+        newPhrases = []
+        for synonym in synonyms:
+            if toReplaceWord == synonym: 
+                continue
+            newPhrase = string.replace(toReplaceWord, synonym)
+            newPhrases.append(newPhrase)
+        return newPhrases;         
+    
+    def getTokenIndex (self, tokens, token):
+        i = 0
+        while i < len(tokens):
+            if tokens[i] == token:
+                return i
+            i =  i + 1
+        return -1
+    
+    def getModifier(self, stringTokens, modifiers):
+        for modifier in modifiers:
+            index = self.getTokenIndex(stringTokens, modifier)
+            if index != -1:
+                return stringTokens[index]
+        return ""
+    
+    def setList(self, list_, value):
+        if not (value in list_) and value!="":
+            list_.append(value)
+        return list_
 
-
-
+    
+    def addUnique(self, list_, newList):
+        for value in newList:
+            list_ = self.setList(list_, value)
+        return list_

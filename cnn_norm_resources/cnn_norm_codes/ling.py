@@ -11,7 +11,13 @@ class Ling():
         self.set_suffix_map()
         self.prefixMap = {}
         self.setPrefixMap()
-        self.AFFIX = "ganglioma|cancer";
+        self.AFFIX = "ganglioma|cancer"
+        self.affixMap = {}
+        self.setAffixMap()
+        self.SINGULAR_DISORDER_SYNONYMS = ["disease", "disorder", "condition", "syndrome", "symptom",
+            "abnormality", "NOS", "event", "episode", "issue", "impairment"]
+            
+        self.PLURAL_DISORDER_SYNONYMS = ["diseases", "disorders", "conditions", "syndromes", "symptoms", "abnormalities", "events", "episodes", "issues", "impairments"]
     
     def set_suffix_map(self, file_path = os.path.join("../text_resources/suffix.txt")):
         f = open(file_path,"r")
@@ -61,7 +67,29 @@ class Ling():
                 self.getPrefix(str_, 4) if self.prefixMap.__contains__(self.getPrefix(str_, 4)) else 
                 (self.getPrefix(str_, 3) if self.prefixMap.__contains__(self.getPrefix(str_, 3)) else ""))  
     
-        
+
+    def setAffixMap(self,file_name = os.path.join("../text_resources/affix.txt")):
+        f = open(file_name,"r")
+        for line_ in f:
+            line_ = str(line_).strip()
+            tokens = line_.split("||")
+            value  = "" if len(tokens) == 1 else tokens[1]
+            self.affixMap[tokens[0]] = value
+
+
+    def getAffixMap(self):
+        return self.affixMap
+
+    """
+    def exactTokenMatch(String phrase1, String phrase2) {
+    List<String> tokens = new ArrayList<>(Arrays.asList(phrase1.split("\\s+")));
+    tokens.removeAll(new ArrayList<>(Arrays.asList(phrase2.split("\\s+"))));
+    return tokens.isEmpty() && phrase1.split("\\s+").length == phrase2.split("\\s+").length ? true : false;
+}
+    
+    """
+
+
 
 """
      if self.suffix_map.has_key(self.get_suffix(str_,2)):
