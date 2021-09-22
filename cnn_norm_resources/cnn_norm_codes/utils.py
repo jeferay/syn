@@ -7,7 +7,6 @@ class Utils():
     def __init__(self) -> None:
         self.ling = Ling()
         
-
     def split_string_into_prepostional_phrases(self, string_):
         prepositions_list = ["in", "with", "on", "of"]
         all_phrases = []

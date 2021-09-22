@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.insert(0,"/home/megh/projects/entity-norm/syn/")
+sys.path.insert(0, "/home/megh/projects/entity-norm/cnn-norm-obo/")
 from code.dataset import *
 from utils import Utils
 import numpy as np
@@ -8,7 +8,6 @@ import torch
 from ling import * 
 
 class Sieves():
-
     def __init__(self, dataset_path = os.path.join("../../data/datasets/cl.obo"), util = None) -> None:
         self.name_array, self.query_id_array, self.mention2id, self.edge_index  = load_data(filename=dataset_path)
         self.name2id, self.query2id  = self.process_data_for_seive()
@@ -143,12 +142,11 @@ class Sieves():
 
     def disorder_syn_replacement(self):
         self.current_unnormalized_queries_for_iteration =  self.current_unnormalized_queries.copy()
-
+        transformedNames = []
         for nameForTransformation in self.current_unnormalized_queries_for_iteration:
             nameForTransformationTokens = nameForTransformation.split(" ")
             modifier = self.util.getModifier(nameForTransformationTokens, self.ling.PLURAL_DISORDER_SYNONYMS)
             if not modifier == "":
-
                 transformedNames = self.util.addUnique(transformedNames, self.util.substituteDiseaseModifierWithSynonyms(nameForTransformation, modifier, self.ling.PLURAL_DISORDER_SYNONYMS))
 
                 transformedNames.append(self.util.deleteTailModifier(nameForTransformationTokens, modifier))
@@ -157,17 +155,21 @@ class Sieves():
                       
             modifier = self.util.getModifier(nameForTransformationTokens, self.ling.SINGULAR_DISORDER_SYNONYMS)
             if not modifier == "":
-                transformedNames = self.util.addUnique(transformedNames, self.util.substituteDiseaseModifierWithSynonyms(nameForTransformation, modifier, self.ling.SINGULAR_DISORDER_SYNONYMS));
+                transformedNames = self.util.addUnique(transformedNames, self.util.substituteDiseaseModifierWithSynonyms(nameForTransformation, modifier, self.ling.SINGULAR_DISORDER_SYNONYMS))
                 transformedNames = self.util.setList(transformedNames, self.util.deleteTailModifier(nameForTransformationTokens, modifier))
                 continue
                        
             transformedNames = self.util.addUnique(transformedNames, self.util.appendModifier(nameForTransformation, self.ling.SINGULAR_DISORDER_SYNONYMS))
             self.exact_match_util(transformedNames, nameForTransformation)
-            print(transformedNames)
 
     def stemming(self):
+        pass
         
-
+    def composite_name(self):
+        pass
+        
+    def partial_match_sieve(self):
+        pass
 
     def analysis_dataset(self):
         prepositions_list  = ["in", "with", "on", "of"]
@@ -184,6 +186,7 @@ class Sieves():
     
     
     def run_sieves(self):
+        
         self.sieve_exact_match()
         self.abbrevation_expansion_sieve()
         self.subject_object_sieve()
@@ -191,6 +194,9 @@ class Sieves():
         self.hyphenation_sieve()
         self.affix()
         self.disorder_syn_replacement()
+        self.stemming()
+        self.composite_name()
+        self.partial_match()
 
 
 
